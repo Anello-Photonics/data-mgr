@@ -376,7 +376,7 @@ int read_sept_pvt(const char* pvtfname, std::vector< pvt_t> &pvts)
 	if (fGGA) fclose(fGGA);
 	return pvts.size() > 0;
 }
-
+#if 0
 int read_ubx_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
 {
 	FILE* fGPS = fopen(pvtfname, "r"); if (!fGPS) return 0;
@@ -447,7 +447,7 @@ int read_ubx_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
 	if (fGGA) fclose(fGGA);
 	return pvts.size() > 0;
 }
-
+#endif
 
 
 int Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lon, double ht, double geod, double speed, double heading, double pdop, int nsat, unsigned char* buf) {
@@ -548,7 +548,7 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 
 	double time_offset = 1330752542.6489844;
 	std::vector<pvt_t> pvts;
-	//if (!found_time_offset(imufname, &time_offset)) return 0;
+	if (!found_time_offset(imufname, &time_offset)) return 0;
 	if (!read_sept_pvt(gpsfname, pvts)) return 0;
 
 	char buffer[1024] = { 0 };
