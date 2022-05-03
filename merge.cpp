@@ -539,6 +539,163 @@ int Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, doubl
 	return(countOut);
 }
 
+static int decode_a1_asc_file_ins(const char* fname)
+{
+	FILE* fLOG = fopen(fname, "r"); if (!fLOG) return 0;
+	char buffer[512] = { 0 };
+	FILE* fGGA = NULL;
+	FILE* fCSV = NULL;
+	unsigned long index = 0;
+	char* val[MAXFIELD];
+	while (fLOG != NULL && !feof(fLOG))
+	{
+		if (fgets(buffer, sizeof(buffer), fLOG) == NULL) break;
+		if (strlen(buffer) < 1) continue;
+		++index;
+		if (index < 2) continue;
+		int num = parse_fields(buffer, val);
+		if (num < 13) continue;
+		double ws = atof(val[1])*1.0e-9;
+		int wk = floor(ws) / (7 * 24 * 3600);
+		ws -= wk * 7 * 24 * 3600;
+		int status = atoi(val[2]); 
+		double blh[3] = { 0 };
+		blh[0] = atof(val[3]) * D2R; /* lat */
+		blh[1] = atof(val[4]) * D2R; /* lon */
+		blh[2] = atof(val[5]); /* ht */
+		double vel[3] = { 0 };
+		vel[0] = atof(val[6]);
+		vel[1] = atof(val[7]);
+		vel[2] = atof(val[8]);
+		double att[3] = { 0 };
+		att[0] = atof(val[9]);
+		att[1] = atof(val[10]);
+		att[2] = atof(val[11]);
+		int flag = atoi(val[12]);
+		/*
+imu_time_ms,gps_time_ns,ins_solution_status,lat_deg,lon_deg,alt_m,velocity_0_mps,velocity_1_mps,velocity_2_mps,attitude_0_deg,attitude_1_deg,attitude_2_deg,zupt_flag,position_geojson
+428440,1335259598642443520,1,56.6810955,-5.1093139,61.4550018311,,,,-0.049008,1.032018,0.832515,1,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]}, ""properties"": {""radius"": 1, ""fillColor"": [255, 0, 0]}}"
+428450,1335259598652437504,1,56.6810955,-5.1093139,61.4550018311,,,,-0.04765,1.035131,0.832629,1,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]}, ""properties"": {""radius"": 1, ""fillColor"": [255, 0, 0]}}"
+		*/
+		if (!fGGA) fGGA = set_output_file(fname, "-ins.nmea");
+		if (!fCSV) fCSV = set_output_file(fname, "-ins.csv");
+		if (fGGA)
+		{
+			char gga_buffer[255] = { 0 };
+			outnmea_gga((unsigned char*)gga_buffer, ws, 1, blh, 10, 1.0, 0);
+			fprintf(fGGA, "%s", gga_buffer);
+		}
+		if (fCSV)
+		{
+			fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%i,%i\n", ws, blh[0] * R2D, blh[1] * R2D, blh[2], vel[0], vel[1], vel[2], att[0], att[1], att[2], status, flag);
+		}
+	}
+	if (fLOG) fclose(fLOG);
+	if (fCSV) fclose(fCSV);
+	if (fGGA) fclose(fGGA);
+}
+static int decode_a1_asc_file_gps(const char* fname)
+{
+	FILE* fLOG = fopen(fname, "r"); if (!fLOG) return 0;
+	char buffer[512] = { 0 };
+	FILE* fGGA = NULL;
+	FILE* fCSV = NULL;
+	unsigned long index = 0;
+	char* val[MAXFIELD];
+	while (fLOG != NULL && !feof(fLOG))
+	{
+		if (fgets(buffer, sizeof(buffer), fLOG) == NULL) break;
+		if (strlen(buffer) < 1) continue;
+		++index;
+		if (index < 2) continue;
+		int num = parse_fields(buffer, val);
+		if (num < 14) continue;
+		double ws = atof(val[1]) * 1.0e-9;
+		int wk = floor(ws) / (7 * 24 * 3600);
+		ws -= wk * 7 * 24 * 3600;
+		double pvt[20] = { 0 };
+		pvt[0] = atof(val[2]) * D2R; /* lat */
+		pvt[1] = atof(val[3]) * D2R; /* lon */
+		pvt[2] = atof(val[4]); /* ht */
+		pvt[3] = atof(val[5]);
+		pvt[4] = atof(val[6]);
+		pvt[5] = atof(val[7]);
+		pvt[6] = atof(val[8]);
+		pvt[7] = atof(val[9]);
+		pvt[8] = atof(val[10]);
+		pvt[9] = atof(val[11]);
+		pvt[10] = atof(val[12]);
+		pvt[11] = atof(val[13]);
+		pvt[12] = atof(val[14]);
+		/*
+imu_time_ms,gps_time_ns,lat_deg,lon_deg,alt_ellipsoid_m,alt_msl_m,speed_mps,heading_deg,accuracy_horizontal_m,accuracy_vertical_m,PDOP,gnss_fix_type,num_sats,speed_accuracy_mps,heading_accuracy_deg,carrier_solution_status,position_geojson
+428557.383,1335259598749614848,56.6810955,-5.1093139,61.453,9.855,0.002,0,0.23,0.352,1.05,3,30,0.086,180,0,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]}, ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
+428797.368,1335259598999614720,56.6810955,-5.109314,61.452,9.853,0.001,0,0.23,0.351,1.05,3,30,0.083,180,0,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.109314, 56.6810955]}, ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
+429297.369,1335259599499613952,56.6810955,-5.109314,61.453,9.855,0.008,0,0.23,0.351,1.05,3,30,0.088,180,0,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.109314, 56.6810955]}, ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
+		*/
+		if (!fGGA) fGGA = set_output_file(fname, "-gps.nmea");
+		if (!fCSV) fCSV = set_output_file(fname, "-gps.csv");
+		if (fGGA)
+		{
+			char gga_buffer[255] = { 0 };
+			outnmea_gga((unsigned char*)gga_buffer, ws, 1, pvt, 10, 1.0, 0);
+			fprintf(fGGA, "%s", gga_buffer);
+		}
+		if (fCSV)
+		{
+			fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", ws, pvt[0] * R2D, pvt[1] * R2D, pvt[2], pvt[3], pvt[4], pvt[5], pvt[6], pvt[7], pvt[8], pvt[9], pvt[10], pvt[11], pvt[12]);
+		}
+	}
+	if (fLOG) fclose(fLOG);
+	if (fCSV) fclose(fCSV);
+	if (fGGA) fclose(fGGA);
+}
+static int decode_a1_asc_file_imu(const char* fname)
+{
+	FILE* fLOG = fopen(fname, "r"); if (!fLOG) return 0;
+	char buffer[512] = { 0 };
+	FILE* fCSV = NULL;
+	unsigned long index = 0;
+	char* val[MAXFIELD];
+	while (fLOG != NULL && !feof(fLOG))
+	{
+		if (fgets(buffer, sizeof(buffer), fLOG) == NULL) break;
+		if (strlen(buffer) < 1) continue;
+		++index;
+		if (index < 2) continue;
+		int num = parse_fields(buffer, val);
+		if (num < 11) continue;
+		double imu[20] = { 0 };
+		imu[0] = atof(val[0]) * 1.0e-3;
+		imu[1] = atof(val[1]); /* fx */
+		imu[2] = atof(val[2]); /* fy */
+		imu[3] = atof(val[3]); /* fz */
+		imu[4] = atof(val[4]); /* wx */
+		imu[5] = atof(val[5]); /* wy */
+		imu[6] = atof(val[6]); /* wz */
+		imu[7] = atof(val[7]); /* wz_fog */
+		imu[8] = atof(val[8]); /* odr */
+		imu[9] = atof(val[9]); /* odr time */
+		imu[10] = atof(val[10]); /* temp */
+		/*
+imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_dps,fog_angrate_dps,odometer_speed_mps,odometer_time_ms,temperature_c
+428439.173,0.0154,-0.0013,-1.0078,-0.0753,-0.0451,0.0415,-0.0031,0,0,22.5898
+428449.208,0.0189,0.0001,-1.0089,0.1864,0.1983,-0.031,0.00279,0,0,22.5898
+428459.202,0.0179,-0.001,-1.0001,0.1433,-0.0165,-0.0129,0.00476,0,0,22.625
+428469.196,0.0194,-0.0012,-0.9993,0.2482,-0.0333,-0.005,-0.00505,0,0,22.625
+428479.191,0.0205,-0.0031,-0.9954,0.0304,-0.0353,-0.091,0.02633,0,0,22.625
+428489.185,0.0185,-0.0026,-1.0076,-0.0917,-0.0185,-0.1251,-0.01484,0,0,22.625
+		*/
+		if (!fCSV) fCSV = set_output_file(fname, "-imu.csv");
+		if (fCSV)
+		{
+			fprintf(fCSV, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", imu[0], imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
+		}
+	}
+	if (fLOG) fclose(fLOG);
+	if (fCSV) fclose(fCSV);
+}
+
 int merge_data_file(const char* imufname, const char *gpsfname)
 {
 	FILE* fIMU = NULL; 
@@ -612,6 +769,9 @@ int main(int argc, char** argv)
 {
 	if (argc < 3)
 	{
+		//decode_a1_asc_file_ins("D:\\data\\GlencoeSkiCentre\\ins.csv");
+		//decode_a1_asc_file_gps("D:\\data\\GlencoeSkiCentre\\gps.csv");
+		//decode_a1_asc_file_imu("D:\\data\\GlencoeSkiCentre\\imu.csv");
 	}
 	else
 	{
