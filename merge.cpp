@@ -342,7 +342,7 @@ int read_sept_pvt(const char* pvtfname, std::vector< pvt_t> &pvts)
 			num = sscanf(buffer, "%i %lf %lf %lf %lf %lf %lf %lf %i", &id, &time, &pvt.pdop, &pvt.tdop, &pvt.hdop, &pvt.vdop, &pvt.hpl, &pvt.vpl, &nsat1);
 			if (id == -3 && num == 9)
 			{
-				if (fabs(time - pvt.time) < 0.01)
+				if (fabs(time - pvt.time) < 0.01 && pvt.nsat>0 && fabs(pvt.lat)<= 90.0 && fabs(pvt.lon) <= 360.0 && fabs(pvt.ht) <= 50000.0 && fabs(pvt.vn)<100.0 && fabs(pvt.ve) < 100.0 && fabs(pvt.vu) < 100.0)
 				{
 					pvts.push_back(pvt);
 					int wk = floor(pvt.time / (7 * 24 * 3600.0));
@@ -450,7 +450,7 @@ int read_ubx_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
 #endif
 
 
-int Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lon, double ht, double geod, double speed, double heading, double pdop, int nsat, unsigned char* buf) {
+int Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lon, double ht, double geod, double speed, double heading, double acc_h, double acc_v, double pdop, int nsat, unsigned char* buf) {
 	// Construct the output message, APGPS
 	char* p = (char*)buf;
 	p += sprintf(p, "#APGPS,");
@@ -492,8 +492,8 @@ int Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, doubl
 	p += sprintf(p, "%.4f,", heading);
 
 	// Accuracy, HDOP, and PDOP
-	p += sprintf(p, "%.4f,", 0.2);
-	p += sprintf(p, "%.4f,", 0.3);
+	p += sprintf(p, "%.4f,", acc_h);
+	p += sprintf(p, "%.4f,", acc_v);
 	p += sprintf(p, "%.4f,", pdop);
 
 	// Fix-Type and number of satellites
@@ -543,17 +543,19 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 {
 	FILE* fIMU = NULL; 
 	FILE* fOUT = NULL;
+	FILE* fCSV = NULL;
 
 	printf("%s\n%s\n", imufname, gpsfname);
 
-	double time_offset = 1330752542.6489844;
+	double time_offset = 0.0;
 	std::vector<pvt_t> pvts;
-	if (!found_time_offset(imufname, &time_offset)) return 0;
 	if (!read_sept_pvt(gpsfname, pvts)) return 0;
+	if (!found_time_offset(imufname, &time_offset)) return 0;
 
 	char buffer[1024] = { 0 };
 	fIMU = fopen(imufname, "rb"); if (fIMU == NULL) return 0;
 	fOUT = set_output_file(imufname, "-sept.log");
+	fCSV = set_output_file(imufname, "-sync.csv");
 
 	char* val[MAXFIELD];
 
@@ -565,6 +567,10 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 	uint8_t data = 0;
 	nmea_buff_t buff = { 0 };
 	std::vector<pvt_t>::iterator pvt = pvts.begin();
+	double last_heading = 0;
+	unsigned long numofimu = 0;
+	double wk = floor(time_offset / (7 * 24 * 3600));
+	double ws_offset = time_offset - wk * (7 * 24 * 3600);
 	while (fIMU != NULL && !feof(fIMU))
 	{
 		if ((data = fgetc(fIMU)) == EOF) break;
@@ -576,19 +582,54 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 			memcpy(buffer, buff.dat, sizeof(char) * buff.nbyte);
 			int num = parse_fields(buffer, val);
 			double timeIMU = atof(val[1]) * 1.0e-3;
+			double fxyz[3] = { atof(val[2]), atof(val[3]), atof(val[4]) };
+			double wxyz[4] = { atof(val[5]), atof(val[6]), atof(val[7]), atof(val[8]) };
+			double odr[2] = { atof(val[9]), atof(val[10]) * 1.0e-3 };
+
+			if (fCSV)
+			{
+				fprintf(fCSV, "%15.7f,%10.6f,%10.6f,%10.6f,%10.6f,%10.6f,%10.6f,%10.6f,%10.4f,%15.7f\n"
+					, timeIMU + ws_offset, fxyz[0], fxyz[1], fxyz[2], wxyz[0], wxyz[1], wxyz[2], wxyz[3], odr[0], odr[1]>0.01? (odr[1] + ws_offset) : (odr[1])
+				);
+			}
 
 			while (pvt != pvts.end())
 			{
 				double timeIMU_GPS = pvt->time - time_offset;
 				if (timeIMU_GPS <= timeIMU)
 				{
-					double heading = atan2(pvt->ve, pvt->vn) * 180 / PI;
-					if (heading < 0)
-						heading += 360.0;
-					double speed = sqrt(pvt->vn * pvt->vn + pvt->ve * pvt->ve);
-					char gga_buff[255] = { 0 };
-					Output_GenerateMessage_GPS(timeIMU_GPS, pvt->time, pvt->lat, pvt->lon, pvt->ht, pvt->geod, speed, heading, pvt->pdop, pvt->nsat, (unsigned char*)gga_buff);
-					if (fOUT) fprintf(fOUT, "%s", gga_buff);
+					/*
+Col2:  time (GPS second since Jan 06, 1980)
+Col3:  Latitude in radians, or -20000000000 if not available
+Col4:  Longitude in radians, or -20000000000 if not available
+Col5:  Ellipsoidal height in meters, or -20000000000 if not available
+Col6:  Geodetic Ondulation, or -20000000000 if not available
+Col7:  Vn in m/s, or -20000000000 if not available
+Col8:  Ve in m/s, or -20000000000 if not available
+Col9:  Vu in m/s, or -20000000000 if not available
+Col10:  Clock bias in seconds, or -20000000000 if not available
+Col11: Clock drift in seconds/seconds, or -20000000000 if not available
+Col12: NbrSV
+Col13: PVT Mode field
+Col14: MeanCorrAge in 1/100 seconds, or 65535 if not available
+					*/
+					if (fabs(pvt->lat) > 100000.0 || fabs(pvt->lon) > 100000.0 || fabs(pvt->ht) > 100000.0 || fabs(pvt->vn) > 100000.0 || fabs(pvt->ve) > 100000.0 || fabs(pvt->vu) > 100000.0)
+					{
+
+					}
+					else if (numofimu > 0)
+					{
+						double speed = sqrt(pvt->vn * pvt->vn + pvt->ve * pvt->ve);
+						double heading = speed > 0.5 ? (atan2(pvt->ve, pvt->vn) * 180 / PI) : (last_heading);
+						if (heading < 0)
+							heading += 360.0;
+
+						double acc_h = pvt->hpl / 4.5 / pvt->hdop;
+						double acc_v = pvt->vpl / 4.5 / pvt->vdop;
+						char gga_buff[255] = { 0 };
+						Output_GenerateMessage_GPS(timeIMU_GPS, pvt->time, pvt->lat, pvt->lon, pvt->ht, pvt->geod, speed, heading, acc_h, acc_v, pvt->pdop, pvt->nsat, (unsigned char*)gga_buff);
+						if (fOUT) fprintf(fOUT, "%s", gga_buff);
+					}
 					++pvt;
 				}
 				else
@@ -597,6 +638,11 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 				}
 			}
 			if (fOUT) fprintf(fOUT, "%s", buff.dat);
+			++numofimu;
+		}
+		else if (strstr((char*)buff.dat, "#APINS") != NULL)
+		{
+			if (fOUT) fprintf(fOUT, "%s", buff.dat);
 		}
 
 		buff.nbyte = 0;
@@ -604,6 +650,7 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 
 	if (fIMU) fclose(fIMU);
 	if (fOUT) fclose(fOUT);
+	if (fCSV) fclose(fCSV);
 
 	return 1;
 }
@@ -615,7 +662,8 @@ int main(int argc, char** argv)
 	}
 	else
 	{
-		merge_data_file(argv[1], argv[2]);
+		//merge_data_file(argv[1], argv[2]);
 	}
+	merge_data_file("D:\\navfest\\WSMR_Day1\\sept\\Scenario_Unit1_1_2-input.txt", "D:\\navfest\\WSMR_Day1\\sept\\measasc.dat");
 	return 0;
 }
