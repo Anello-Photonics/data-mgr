@@ -654,7 +654,165 @@ Col14: MeanCorrAge in 1/100 seconds, or 65535 if not available
 
 	return 1;
 }
- 
+
+int read_st_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
+{
+	FILE* fGPS = fopen(pvtfname, "r"); if (!fGPS) return 0;
+	char buffer[512] = { 0 };
+	pvt_t pvt = { 0 };
+	FILE* fOUT = set_output_file(pvtfname, "-pvt.csv");
+	FILE* fGGA = NULL;
+	int index = 0;
+	double pre_time = 0;
+	while (fGPS != NULL && !feof(fGPS))
+	{
+		if (fgets(buffer, sizeof(buffer), fGPS) == NULL) break;
+		/* time, lat, lon, ht, vn, ve, vd, refvar, stdX, stdY, stdZ, pdop, nsat
+133255.2000000,  34.058338023,-106.897408318, 1397.9390,    0.0093,    0.0160,    0.0193,   0.22,   3.54,   7.07,   4.58,   1.95,19
+133255.3000000,  34.058338167,-106.897408267, 1397.8389,    0.0183,    0.0135,    0.0469,   0.23,   3.54,   7.07,   4.58,   1.95,19
+133255.4000000,  34.058337811,-106.897408569, 1397.9250,   -0.0012,   -0.0082,   -0.0246,   0.23,   3.54,   7.07,   4.58,   1.95,19
+133255.5000000,  34.058337999,-106.897407839, 1397.7827,   -0.0132,   -0.0109,   -0.0340,   0.22,   3.54,   7.07,   4.58,   1.95,19
+		*/
+		char* val[MAXFIELD];
+		int num = parse_fields(buffer, val);
+		if (num < 13) continue;
+		pvt.time = atof(val[0]) + 2200 * 7 * 24 * 3600;
+		pvt.lat = atof(val[1]);
+		pvt.lon = atof(val[2]);
+		pvt.ht = atof(val[3]);
+		pvt.vn = atof(val[4]);
+		pvt.ve = atof(val[5]);
+		pvt.vu = -atof(val[6]);
+		double refvar = atof(val[7]);
+		double stdXYZ[3] = { atof(val[8]), atof(val[9]), atof(val[10]) };
+		double acc_h = sqrt(stdXYZ[0] * stdXYZ[0] + stdXYZ[1] * stdXYZ[1] + stdXYZ[2] * stdXYZ[2]) * refvar;
+		pvt.acc_h = acc_h;
+		pvt.acc_v = acc_h * 1.5;
+		pvt.pdop = atof(val[10]);
+		pvt.nsat = atof(val[11]);
+		pvts.push_back(pvt);
+		int wk = floor(pvt.time / (7 * 24 * 3600.0));
+		double ws = pvt.time - wk * (7 * 24 * 3600.0);
+		if ((pvt.time - pre_time) > 30.0)
+		{
+			if (fGGA) fclose(fGGA);
+			char temp[255] = { 0 };
+			sprintf(temp, "-pvt%03i.nmea", index);
+			fGGA = set_output_file(pvtfname, temp);
+			++index;
+		}
+		pre_time = pvt.time;
+		if (fGGA)
+		{
+			char gga_buffer[255] = { 0 };
+			double blh[3] = { pvt.lat, pvt.lon, pvt.ht };
+			outnmea_gga((unsigned char*)gga_buffer, ws, 1, blh, pvt.nsat, pvt.pdop, 0);
+			fprintf(fGGA, "%s", gga_buffer);
+		}
+	}
+	if (fGPS) fclose(fGPS);
+	if (fOUT) fclose(fOUT);
+	if (fGGA) fclose(fGGA);
+	return pvts.size() > 0;
+}
+
+int merge_st_file(const char* imufname, const char* gpsfname)
+{
+	FILE* fIMU = NULL;
+	FILE* fOUT = NULL;
+	FILE* fCSV = NULL;
+
+	printf("%s\n%s\n", imufname, gpsfname);
+
+	double time_offset = 0.0;
+	std::vector<pvt_t> pvts;
+	if (!read_st_pvt(gpsfname, pvts)) return 0;
+	if (!found_time_offset(imufname, &time_offset)) return 0;
+
+	char buffer[1024] = { 0 };
+	fIMU = fopen(imufname, "rb"); if (fIMU == NULL) return 0;
+	fOUT = set_output_file(imufname, "-st.log");
+	fCSV = set_output_file(imufname, "-st.csv");
+
+	char* val[MAXFIELD];
+
+	double rate = 0.0;
+
+	double heading = 0.0, speed = 0.0, lat = 0.0, lon = 0.0, ht = 0.0, pdop = 0.0, time_GPS = 0.0, satnum = 0.0;
+
+	double StartTime = 0;
+	uint8_t data = 0;
+	nmea_buff_t buff = { 0 };
+	std::vector<pvt_t>::iterator pvt = pvts.begin();
+	double last_heading = 0;
+	unsigned long numofimu = 0;
+	double wk = floor(time_offset / (7 * 24 * 3600));
+	double ws_offset = time_offset - wk * (7 * 24 * 3600);
+	while (fIMU != NULL && !feof(fIMU))
+	{
+		if ((data = fgetc(fIMU)) == EOF) break;
+		if (!add_buff(&buff, data)) continue;
+
+		if (strstr((char*)buff.dat, "#APIMU") != NULL)
+		{
+			memset(buffer, 0, sizeof(buffer));
+			memcpy(buffer, buff.dat, sizeof(char) * buff.nbyte);
+			int num = parse_fields(buffer, val);
+			double timeIMU = atof(val[1]) * 1.0e-3;
+			double fxyz[3] = { atof(val[2]), atof(val[3]), atof(val[4]) };
+			double wxyz[4] = { atof(val[5]), atof(val[6]), atof(val[7]), atof(val[8]) };
+			double odr[2] = { atof(val[9]), atof(val[10]) * 1.0e-3 };
+
+			if (fCSV)
+			{
+				fprintf(fCSV, "%15.7f,%10.6f,%10.6f,%10.6f,%10.6f,%10.6f,%10.6f,%10.6f,%10.4f,%15.7f\n"
+					, timeIMU + ws_offset, fxyz[0], fxyz[1], fxyz[2], wxyz[0], wxyz[1], wxyz[2], wxyz[3], odr[0], odr[1] > 0.01 ? (odr[1] + ws_offset) : (odr[1])
+				);
+			}
+
+			while (pvt != pvts.end())
+			{
+				double timeIMU_GPS = pvt->time - time_offset;
+				if (timeIMU_GPS <= timeIMU)
+				{
+					if (numofimu > 0)
+					{
+						double speed = sqrt(pvt->vn * pvt->vn + pvt->ve * pvt->ve);
+						double heading = speed > 0.5 ? (atan2(pvt->ve, pvt->vn) * 180 / PI) : (last_heading);
+						if (heading < 0)
+							heading += 360.0;
+
+						//double acc_h = pvt->hpl / 4.5 / pvt->hdop;
+						//double acc_v = pvt->vpl / 4.5 / pvt->vdop;
+						char gga_buff[255] = { 0 };
+						Output_GenerateMessage_GPS(timeIMU_GPS, pvt->time, pvt->lat, pvt->lon, pvt->ht, pvt->geod, speed, heading, pvt->acc_h, pvt->acc_v, pvt->pdop, pvt->nsat, (unsigned char*)gga_buff);
+						if (fOUT) fprintf(fOUT, "%s", gga_buff);
+					}
+					++pvt;
+				}
+				else
+				{
+					break;
+				}
+			}
+			if (fOUT) fprintf(fOUT, "%s", buff.dat);
+			++numofimu;
+		}
+		else if (strstr((char*)buff.dat, "#APINS") != NULL)
+		{
+			if (fOUT) fprintf(fOUT, "%s", buff.dat);
+		}
+
+		buff.nbyte = 0;
+	}
+
+	if (fIMU) fclose(fIMU);
+	if (fOUT) fclose(fOUT);
+	if (fCSV) fclose(fCSV);
+
+	return 1;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 3)
@@ -663,7 +821,9 @@ int main(int argc, char** argv)
 	else
 	{
 		//merge_data_file(argv[1], argv[2]);
+		merge_st_file(argv[1], argv[2]);
 	}
-	merge_data_file("D:\\navfest\\WSMR_Day1\\sept\\Scenario_Unit1_1_2-input.txt", "D:\\navfest\\WSMR_Day1\\sept\\measasc.dat");
+	//merge_data_file("D:\\navfest\\WSMR_Day1\\sept\\Scenario_Unit1_1_2-input.txt", "D:\\navfest\\WSMR_Day1\\sept\\measasc.dat");
+	//merge_st_file("D:\\navfest\\WSMR_Day1\\st\\Scenario_Unit1_1_2-input.txt", "D:\\navfest\\WSMR_Day1\\st\\st-day1-sol.csv");
 	return 0;
 }
