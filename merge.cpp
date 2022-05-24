@@ -677,8 +677,8 @@ int read_st_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
 		int num = parse_fields(buffer, val);
 		if (num < 13) continue;
 		pvt.time = atof(val[0]) + 2200 * 7 * 24 * 3600;
-		pvt.lat = atof(val[1]);
-		pvt.lon = atof(val[2]);
+		pvt.lat = atof(val[1]) * D2R;
+		pvt.lon = atof(val[2]) * D2R;
 		pvt.ht = atof(val[3]);
 		pvt.vn = atof(val[4]);
 		pvt.ve = atof(val[5]);
