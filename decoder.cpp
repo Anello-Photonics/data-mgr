@@ -955,7 +955,7 @@ static void print(FILE* fp, FILE *fsol, const NComRxC* nrx)
 	}
 }
 
-
+/* read oxts ncom file, and generate csv file and nmea gga file */
 static int read_oxts_data(const char* fname)
 {
 	FILE* fLOG = fopen(fname, "rb"); if (!fLOG) return 0;
@@ -1006,6 +1006,223 @@ static int read_oxts_data(const char* fname)
 	return 0;
 }
 
+#ifndef MAX_BUF_LEN
+#define MAX_BUF_LEN (1200)
+#endif
+
+typedef struct
+{
+	uint8_t buf[MAX_BUF_LEN];
+	int nbyte;
+}a1buff_t;
+
+static int input_a1_data(a1buff_t* a1, uint8_t data)
+{
+	int ret = 0;
+	if (a1->nbyte >= MAX_BUF_LEN) a1->nbyte = 0;
+	/* #AP */
+	if (a1->nbyte == 1 && data != 'A') a1->nbyte = 0;
+	if (a1->nbyte == 2 && data != 'P') a1->nbyte = 0;
+	if ( a1->nbyte == 0 )
+	{
+		if (data == '#')
+		{
+			a1->buf[a1->nbyte++] = data;
+		}
+	}
+	else
+	{
+		a1->buf[a1->nbyte++] = data;
+		if (data == '\r' || data == '\n')
+		{
+			/* 1*74 */
+			if (a1->nbyte > 3 && a1->buf[a1->nbyte - 4] == '*')
+				ret = 1;
+		}
+	}
+	return ret;
+}
+
+/* read A1 file*/
+static int read_a1_data(const char* fname)
+{
+	FILE* fLOG = fopen(fname, "rb"); if (!fLOG) return 0;
+	int data = 0;
+	FILE* fCSV = NULL;
+	FILE* fGGA = NULL;
+	FILE* fIMU = NULL;
+	FILE* fGPS_CSV = NULL;
+	FILE* fGP2_CSV = NULL;
+	FILE* fGPS_GGA = NULL;
+	FILE* fGP2_GGA = NULL;
+	char* val[MAXFIELD];
+	a1buff_t a1buff = { 0 };
+	char* buffer = (char*)a1buff.buf;
+	while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF)
+	{
+		int ret = input_a1_data(&a1buff, data);
+		if (ret)
+		{
+			int num = parse_fields(buffer, val);
+			int isOK = 0;
+			if (num >= 17 && strstr(val[0], "APGPS") != NULL)
+			{
+				/* time [s], lat [deg], lon [deg], ht [m], speed [m/s], heading [deg], hor. accuracy [m], ver. accuracy [m], PDOP, fixType, sat num, gps second [s], pps [s] */
+				/*
+#APGPS,318213.135,1343773580500184320,37.3988755,-121.9791327,-27.9650,1.9240,0.0110,0.0000,0.2380,0.3820,0.9700,3,29,0.0820,180.0000,0*65
+				*/
+				double gps[20] = { 0 };
+				gps[0] = atof(val[1]) * 1.0e-3; /* time MCU */
+				gps[1] = atof(val[2]); /* GPS ns */
+
+				gps[2] = atof(val[3]); /* lat */
+				gps[3] = atof(val[4]); /* lon */
+				gps[4] = atof(val[5]); /* ht */
+				gps[5] = atof(val[6]); /* msl */
+
+				gps[6] = atof(val[7]); /* speed */
+				gps[7] = atof(val[8]); /* heading */
+				gps[8] = atof(val[9]); /* acc_h */
+				gps[9] = atof(val[10]); /* acc_v */
+				gps[10] = atof(val[11]); /* pdop */
+				gps[11] = atof(val[12]); /* fixtype */
+				gps[12] = atof(val[13]); /* sat number */
+				gps[13] = atof(val[14]); /* acc speed */
+				gps[14] = atof(val[15]); /* acc heading */
+				gps[15] = atof(val[16]); /* rtk fix status */
+				if (!fGPS_CSV) fGPS_CSV = set_output_file(fname, "-gps.csv");
+				if (fGPS_CSV)
+				{
+					fprintf(fGPS_CSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", gps[0], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
+				}
+				if (!fGPS_GGA) fGPS_GGA = set_output_file(fname, "-gps.nmea");
+				if (fGPS_GGA)
+				{
+					char gga_buffer[255] = { 0 };
+					double blh[3] = { gps[2] * D2R, gps[3] * D2R, gps[4] };
+					outnmea_gga((unsigned char*)gga_buffer, gps[0], 1, blh, gps[12], gps[10], 0);
+					fprintf(fGPS_GGA, "%s", gga_buffer);
+				}
+				isOK = 1;
+			}
+			if (num >= 12 && strstr(val[0], "APGP2") != NULL)
+			{
+				/*
+#APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,1.1400,3,26,0.0600,180.0000,0*07
+				*/
+				double gps[20] = { 0 };
+				gps[0] = atof(val[1]) * 1.0e-3; /* time MCU */
+				gps[1] = atof(val[2]); /* GPS ns */
+
+				gps[2] = atof(val[3]); /* lat */
+				gps[3] = atof(val[4]); /* lon */
+				gps[4] = atof(val[5]); /* ht */
+				gps[5] = atof(val[6]); /* msl */
+
+				gps[6] = atof(val[7]); /* speed */
+				gps[7] = atof(val[8]); /* heading */
+				gps[8] = atof(val[9]); /* acc_h */
+				gps[9] = atof(val[10]); /* acc_v */
+				gps[10] = atof(val[11]); /* pdop */
+				gps[11] = atof(val[12]); /* fixtype */
+				gps[12] = atof(val[13]); /* sat number */
+				gps[13] = atof(val[14]); /* acc speed */
+				gps[14] = atof(val[15]); /* acc heading */
+				gps[15] = atof(val[16]); /* rtk fix status */
+				if (!fGP2_CSV) fGP2_CSV = set_output_file(fname, "-gp2.csv");
+				if (fGP2_CSV)
+				{
+					fprintf(fGP2_CSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", gps[0], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
+				}
+				if (!fGP2_GGA) fGP2_GGA = set_output_file(fname, "-gp2.nmea");
+				if (fGP2_GGA)
+				{
+					char gga_buffer[255] = { 0 };
+					double blh[3] = { gps[2] * D2R, gps[3] * D2R, gps[4] };
+					outnmea_gga((unsigned char*)gga_buffer, gps[0], 1, blh, gps[12], gps[10], 0);
+					fprintf(fGP2_GGA, "%s", gga_buffer);
+				}
+				isOK = 1;
+			}
+			if (num >= 12 && strstr(val[0], "APIMU") != NULL)
+			{
+				/*
+				#APIMU,318214.937,0.0344,-0.0128,1.0077,-0.0817,0.0013,-0.0038,0.01051,0.0000,318214.548,47.0547*55
+				*/
+				double imu[20] = { 0 };
+				imu[0] = atof(val[1]) * 1.0e-3;
+				imu[1] = atof(val[2]); /* fx */
+				imu[2] = atof(val[3]); /* fy */
+				imu[3] = atof(val[4]); /* fz */
+				imu[4] = atof(val[5]); /* wx */
+				imu[5] = atof(val[6]); /* wy */
+				imu[6] = atof(val[7]); /* wz */
+				imu[7] = atof(val[8]); /* wz_fog */
+				imu[8] = atof(val[9]); /* odr */
+				imu[9] = atof(val[10]) * 1.0e-3; /* odr time */
+				imu[10] = atof(val[11]); /* temp */
+				if (!fIMU) fIMU = set_output_file(fname, "-imu.csv");
+				if (fIMU)
+				{
+					fprintf(fIMU, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", imu[0], imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
+				}
+				isOK = 1;
+			}
+			if (num >= 14 && strstr(val[0], "APINS") != NULL)
+			{
+				/* time[s], lat[radian], lon[radian], ht[m], vn[m / s], ve[m / s], vd[m / s], roll[deg], pitch[deg], yaw[deg] */
+				/*
+				#APINS,318215,1343773580502990592,1,37.398875500000,-121.979132700000,-27.965002059937,,,,-0.166232,1.773182,0.250746,1*74
+				*/
+				double ins[20] = { 0 };
+				ins[0] = atof(val[1]) * 1.0e-3;
+				ins[1] = atof(val[2]);
+				ins[2] = atof(val[3]);
+
+				ins[3] = atof(val[4]);
+				ins[4] = atof(val[5]);
+				ins[5] = atof(val[6]);
+
+				ins[6] = atof(val[7]);
+				ins[7] = atof(val[8]);
+				ins[8] = atof(val[9]);
+
+				ins[9] = atof(val[10]);
+				ins[10] = atof(val[11]);
+				ins[11] = atof(val[12]);
+
+				ins[12] = atof(val[13]);
+				if (!fCSV) fCSV = set_output_file(fname, "-rts.csv");
+				if (fCSV)
+				{
+					fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", ins[0], ins[3], ins[4], ins[5], ins[6], ins[7], ins[8], ins[9], ins[10], ins[11], ins[2]);
+				}
+				if (!fGGA) fGGA = set_output_file(fname, "-rts.nmea");
+				if (fGGA)
+				{
+					char gga_buffer[255] = { 0 };
+					double blh[3] = { ins[3] * D2R, ins[4] * D2R, ins[5] };
+					outnmea_gga((unsigned char*)gga_buffer, ins[0], 1, blh, 10, 1, 0);
+					fprintf(fGGA, "%s", gga_buffer);
+				}
+				isOK = 1;
+			}
+			if (!isOK)
+			{
+				printf("%s\n", val[0]);
+			}
+			a1buff.nbyte = 0;
+		}
+	}
+	if (fLOG) fclose(fLOG);
+	if (fCSV) fclose(fCSV);
+	if (fGGA) fclose(fGGA);
+	if (fIMU) fclose(fIMU);
+	if (fGPS_CSV) fclose(fGPS_CSV);
+	if (fGP2_CSV) fclose(fGP2_CSV);
+	if (fGPS_GGA) fclose(fGPS_GGA);
+	if (fGP2_GGA) fclose(fGP2_GGA);
+}
 int main(int argc, char** argv)
 {
 	if (argc < 3)
@@ -1013,7 +1230,9 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_ins("D:\\data\\GlencoeSkiCentre\\ins.csv");
 		//decode_a1_asc_file_gps("D:\\data\\GlencoeSkiCentre\\gps.csv");
 		//decode_a1_asc_file_imu("D:\\data\\GlencoeSkiCentre\\imu.csv");
-		read_oxts_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_drive2_Tag SN40434-022.ncom");
+		//read_oxts_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_drive2_Tag SN40434-022.ncom");
+		//read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_24drive2");
+		read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_102drive2");
 	}
 	else
 	{
