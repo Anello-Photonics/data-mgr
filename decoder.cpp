@@ -7,6 +7,8 @@
 #include <string>
 #include <algorithm>
 
+#include "NComRxC.h"
+
 #ifndef PI
 #define	PI 3.14159265358979
 #endif
@@ -764,7 +766,246 @@ int merge_data_file(const char* imufname, const char *gpsfname)
 
 	return 1;
 }
- 
+
+//============================================================================================================
+//! \brief Simple decoding progress report.
+
+static void report(const NComRxC* nrx)
+{
+	printf("\rChars Read %" PRIu64 ", Packets Read %" PRIu64 ", Chars Skipped %" PRIu64,
+		NComNumChars(nrx), NComNumPackets(nrx), NComSkippedChars(nrx));
+
+	fflush(stdout);
+}
+
+
+//============================================================================================================
+//! \brief Used to write some of the NCom data to a file pointer.
+//!
+//! There are only a few examples here of how to use the data values.
+
+static void print(FILE* fp, FILE *fsol, const NComRxC* nrx)
+{
+	static int HeaderWritten = 0;
+
+	// Add in the headers to the file
+	if (HeaderWritten == 0)
+	{
+#if __linux__
+		fprintf(fp, " WN,WS,"
+#else
+		fwprintf(fp, L" WN,WS,"
+#endif
+			" Latitude(deg),"
+			" Longitude(deg),"
+			" Altitude(m),"
+			" Velocity north(m/s),"
+			" Velocity east(m/s),"
+			" Velocity down(m/s),"
+			" Roll(deg),"
+			" Pitch(deg),"
+			" Heading(deg),"
+			" Acceleration Xv(m/s²),"
+			" Acceleration Yv(m/s²),"
+			" Acceleration Zv(m/s²),"
+			//" Acceleration forward(m/s²),"
+			//" Acceleration lateral(m/s²),"
+			//" Acceleration down(m/s²),"
+			" Angular rate Xv(deg/s),"
+			" Angular rate Yv(deg/s),"
+			" Angular rate Zv(deg/s)"
+			//" Angular rate forward(deg/s),"
+			//" Angular rate lateral(deg/s),"
+			//" Angular rate down(deg/s)"
+		);
+		fprintf(fp, "\n");
+		HeaderWritten = 1;
+	}
+
+	// Print the time - GPS time, local date and time zone.
+	if (nrx->mIsTimeValid)
+	{
+		//double     gps2machine, mMachineTime;
+		//time_t     t1;
+		//struct tm* td;
+		//int        ms;
+
+		// Convert GPS seconds (from 1980-01-06 00:00:00) to machine seconds (from 1970-01-01 00:00:00). It is
+		// very likely the machine will adjust for leap seconds, hence the correct GPS UTC difference is
+		// applied. If the local machine time does not start from 1970-01-01 00:00:00 then the value of
+		// gps2machine below needs to change.
+		//gps2machine = 315964800.0;
+
+		//if (nrx->mIsTimeUtcOffsetValid)
+		//{
+		//	mMachineTime = nrx->mTime + gps2machine + nrx->mTimeUtcOffset;
+		//}
+		//else { mMachineTime = nrx->mTime + gps2machine - 18; }
+
+		// Compute local time
+		//t1 = (time_t)floor(mMachineTime);
+		//td = localtime(&t1);
+		//ms = floor(0.5 + (mMachineTime - t1) * 1000.0);
+		//if (ms < 0) ms = 0; else if (ms > 999) ms = 999;
+
+		// Print: GPS time, local date, time zone.
+		//fprintf(fp, "%10.3f,%04d-%02d-%02d,%02d:%02d:%02d.%03d,",
+		//	nrx->mTime,
+		//	1900 + td->tm_year, 1 + td->tm_mon, td->tm_mday, td->tm_hour, td->tm_min, td->tm_sec, ms);
+		int wk = floor(nrx->mTime / (7 * 24 * 3600.0));
+		double ws = nrx->mTime - wk * 7 * 24 * 3600;
+		fprintf(fp, "%4i,%10.3f,", wk, ws);
+	}
+
+	// Print the measurments listed in the header
+	if (nrx->mIsTimeValid)
+	{
+		int wk = floor(nrx->mTime / (7 * 24 * 3600.0));
+		double ws = nrx->mTime - wk * 7 * 24 * 3600;
+
+		char gga_buffer[255] = { 0 };
+		double blh[3] = { nrx->mLat * D2R, nrx->mLon * D2R, nrx->mAlt };
+		outnmea_gga((unsigned char*)gga_buffer, ws, 1, blh, nrx->mGpsNumObs, nrx->mHDOP, 0);
+		fprintf(fsol, "%s", gga_buffer);
+
+		// Print the 	PosLat (deg)
+		if (nrx->mIsLatValid) fprintf(fp, "%14.9f", nrx->mLat);
+		fprintf(fp, ",");
+
+		// Print the 	PosLon (deg)
+		if (nrx->mIsLonValid) fprintf(fp, "%14.9f", nrx->mLon);
+		fprintf(fp, ",");
+
+		// Print the 	PosAlt (m)
+		if (nrx->mIsAltValid) fprintf(fp, "%10.3f", nrx->mAlt);
+		fprintf(fp, ",");
+
+		// Print the 	VelNorth (km/h)
+		if (nrx->mIsVnValid) fprintf(fp, "%10.3f", nrx->mVn);
+		fprintf(fp, ",");
+
+		// Print the 	VelEast (km/h)
+		if (nrx->mIsVeValid) fprintf(fp, "%10.3f", nrx->mVe);
+		fprintf(fp, ",");
+
+		// Print the 	VelDown (km/h)
+		if (nrx->mIsVdValid) fprintf(fp, "%10.3f", nrx->mVd);
+		fprintf(fp, ",");
+
+		// Print the 	AngleRoll (deg)
+		if (nrx->mIsRollValid) fprintf(fp, "%8.3f", nrx->mRoll);
+		fprintf(fp, ",");
+
+		// Print the 	AnglePitch (deg)
+		if (nrx->mIsPitchValid) fprintf(fp, "%8.3f", nrx->mPitch);
+		fprintf(fp, ",");
+
+		// Print the 	AngleHeading (deg)
+		if (nrx->mIsHeadingValid) fprintf(fp, "%8.3f", nrx->mHeading);
+		fprintf(fp, ",");
+
+		// Print the 	AccelX (m/s²)
+		if (nrx->mIsAxValid) fprintf(fp, "%10.3f", nrx->mAx);
+		fprintf(fp, ",");
+
+		// Print the 	AccelY (m/s²)
+		if (nrx->mIsAyValid) fprintf(fp, "%10.3f", nrx->mAy);
+		fprintf(fp, ",");
+
+		// Print the 	AccelZ (m/s²)
+		if (nrx->mIsAzValid) fprintf(fp, "%10.3f", nrx->mAz);
+		fprintf(fp, ",");
+
+		// Print the 	AngleRateX (deg/s)
+		if (nrx->mIsWxValid) fprintf(fp, "%10.3f", nrx->mWx);
+		fprintf(fp, ",");
+
+		// Print the 	AngleRateY (deg/s)
+		if (nrx->mIsWyValid) fprintf(fp, "%10.3f", nrx->mWy);
+		fprintf(fp, ",");
+
+		// Print the 	AngleRateZ (deg/s)
+		if (nrx->mIsWzValid) fprintf(fp, "%10.3f", nrx->mWz);
+		//fprintf(fp, ",");
+
+		// Print the 	AccelForward (m/s²)
+		//if (nrx->mIsAfValid) fprintf(fp, "%10.3f", nrx->mAf);
+		//fprintf(fp, ",");
+
+		// Print the 	AccelLateral (m/s²)
+		//if (nrx->mIsAlValid) fprintf(fp, "%10.3f", nrx->mAl);
+		//fprintf(fp, ",");
+
+		// Print the 	AccelDown (m/s²)
+		//if (nrx->mIsAdValid) fprintf(fp, "%10.3f", nrx->mAd);
+		//fprintf(fp, ",");
+
+		// Print the 	AngleRateForward (deg/s)
+		//if (nrx->mIsWfValid) fprintf(fp, "%10.3f", nrx->mWf);
+		//fprintf(fp, ",");
+
+		// Print the 	AngleRateLateral (deg/s)
+		//if (nrx->mIsWlValid) fprintf(fp, "%10.3f", nrx->mWl);
+		//fprintf(fp, ",");
+
+		// Print the 	AngleRateDown (deg/s)
+		//if (nrx->mIsWdValid) fprintf(fp, "%10.3f", nrx->mWd);
+
+		fprintf(fp, "\n");
+	}
+}
+
+
+static int read_oxts_data(const char* fname)
+{
+	FILE* fLOG = fopen(fname, "rb"); if (!fLOG) return 0;
+	FILE* fCSV = NULL;
+	FILE* fGGA = NULL;
+
+	int c = 0;                // char from input file
+	NComRxC* nrx = NComCreateNComRxC();
+
+	while (nrx != NULL && fLOG != NULL && !feof(fLOG) && (c = fgetc(fLOG)) != EOF)
+	{
+		// Decode the data
+		if (NComNewChar(nrx, (unsigned char)c) == COM_NEW_UPDATE)
+		{
+			// For regular updates then output to main output file, otherwise,
+			// for falling edge input triggers then output to trigger file.
+			switch (nrx->mOutputPacketType)
+			{
+			case OUTPUT_PACKET_REGULAR: 
+			{
+
+				if (!fCSV) fCSV = set_output_file(fname, "-rts.csv");
+				if (!fGGA) fGGA = set_output_file(fname, "-rts.nmea");
+
+				print(fCSV, fGGA, nrx); 
+				break;
+			}
+			case OUTPUT_PACKET_IN1DOWN:
+			{
+				//print(fptrig, nrx); 
+				break;
+			}
+			default: break;
+			}
+		}
+	}
+
+	// Report final statistics
+	report(nrx);
+	printf("\n");
+
+	if (fLOG) fclose(fLOG);
+	if (fCSV) fclose(fCSV);
+	if (fGGA) fclose(fGGA);
+
+	NComDestroyNComRxC(nrx);
+
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 3)
@@ -772,6 +1013,7 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_ins("D:\\data\\GlencoeSkiCentre\\ins.csv");
 		//decode_a1_asc_file_gps("D:\\data\\GlencoeSkiCentre\\gps.csv");
 		//decode_a1_asc_file_imu("D:\\data\\GlencoeSkiCentre\\imu.csv");
+		read_oxts_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_drive2_Tag SN40434-022.ncom");
 	}
 	else
 	{
