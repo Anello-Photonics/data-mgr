@@ -1222,9 +1222,24 @@ static int read_a1_data(const char* fname)
 	if (fGP2_CSV) fclose(fGP2_CSV);
 	if (fGPS_GGA) fclose(fGPS_GGA);
 	if (fGP2_GGA) fclose(fGP2_GGA);
+	return 0;
+}
+
+double lat2local(double lat, double* lat2north)
+{
+	double f_WGS84 = (1.0 / finv_WGS84);
+	double e2WGS84 = (2.0 * f_WGS84 - f_WGS84 * f_WGS84);
+	double slat = sin(lat);
+	double clat = cos(lat);
+	double one_e2_slat2 = 1.0 - e2WGS84 * slat * slat;
+	double Rn = ae_WGS84 / sqrt(one_e2_slat2);
+	double Rm = Rn * (1.0 - e2WGS84) / (one_e2_slat2);
+	*lat2north = Rm;
+	return Rn * clat;
 }
 int main(int argc, char** argv)
 {
+	//double sn = 0, se = lat2local(37.398872080488 * D2R, &sn);
 	if (argc < 3)
 	{
 		//decode_a1_asc_file_ins("D:\\data\\GlencoeSkiCentre\\ins.csv");
@@ -1232,7 +1247,9 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_imu("D:\\data\\GlencoeSkiCentre\\imu.csv");
 		//read_oxts_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_drive2_Tag SN40434-022.ncom");
 		//read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_24drive2");
-		read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_102drive2");
+		//read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_102drive2");
+		//read_a1_data("D:\\austin\\X-Y-Z test\\2022_8_9_1120_24drive1.txt");
+		read_a1_data("D:\\austin\\X-Y-Z test\\2022_8_9_1120_102drive1.txt");
 	}
 	else
 	{
