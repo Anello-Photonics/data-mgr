@@ -141,7 +141,7 @@ extern int outnmea_gga(unsigned char* buff, float time, int type, double* blh, i
 }
 
 #ifndef MAX_BUF_LEN
-#define MAX_BUF_LEN 1024
+#define MAX_BUF_LEN 4096
 #endif
 
 typedef struct
@@ -1013,7 +1013,10 @@ static int read_oxts_data(const char* fname)
 typedef struct
 {
 	uint8_t buf[MAX_BUF_LEN];
+	int nseg;
 	int nbyte;
+	int nlen; /* length of binary message */
+	int loc[MAXFIELD];
 }a1buff_t;
 
 static int input_a1_data(a1buff_t* a1, uint8_t data)
@@ -1027,17 +1030,55 @@ static int input_a1_data(a1buff_t* a1, uint8_t data)
 	{
 		if (data == '#')
 		{
+			memset(a1, 0, sizeof(a1buff_t));
+			//a1->nseg = a1->nlen = 0;
 			a1->buf[a1->nbyte++] = data;
 		}
 	}
 	else
 	{
-		a1->buf[a1->nbyte++] = data;
-		if (data == '\r' || data == '\n')
+		if (data == ',')
 		{
-			/* 1*74 */
-			if (a1->nbyte > 3 && a1->buf[a1->nbyte - 4] == '*')
-				ret = 1;
+			a1->loc[a1->nseg++] = a1->nbyte;
+			if (a1->nseg == 2)
+			{
+				if (strstr((char*)a1->buf, "APANT") != NULL|| strstr((char*)a1->buf, "APRTK") != NULL)
+				{
+					uint8_t* temp = a1->buf + (a1->loc[0]) + 1;
+					a1->nlen = atof((char*)temp);
+				}
+				else
+				{
+					a1->nlen = 0;
+				}
+			}
+		}
+		a1->buf[a1->nbyte++] = data;
+		if (a1->nlen == 0)
+		{
+			/* check message end for normal asc message */
+			if (data == '\r' || data == '\n')
+			{
+				/* 1*74 */
+				if (a1->nbyte > 3 && a1->buf[a1->nbyte - 4] == '*')
+				{
+					a1->loc[a1->nseg++] = a1->nbyte - 4;
+					ret = 1;
+				}
+			}
+		}
+		else
+		{
+			/* check message end for binary message ,binary msg\r\n */
+			if (a1->nbyte >= (a1->nlen + a1->loc[1] + 3))
+			{
+				if (a1->buf[6] == '1') /* APANT1 */
+					ret = 2;
+				else if (a1->buf[6] == '2') /* APANT2 */
+					ret = 3;
+				else /* APRTK */
+					ret = 4;
+			}
 		}
 	}
 	return ret;
@@ -1055,6 +1096,9 @@ static int read_a1_data(const char* fname)
 	FILE* fGP2_CSV = NULL;
 	FILE* fGPS_GGA = NULL;
 	FILE* fGP2_GGA = NULL;
+	FILE* fANT1 = NULL;
+	FILE* fANT2 = NULL;
+	FILE* fBASE = NULL;
 	char* val[MAXFIELD];
 	a1buff_t a1buff = { 0 };
 	char* buffer = (char*)a1buff.buf;
@@ -1063,9 +1107,41 @@ static int read_a1_data(const char* fname)
 		int ret = input_a1_data(&a1buff, data);
 		if (ret)
 		{
-			int num = parse_fields(buffer, val);
 			int isOK = 0;
-			if (num >= 17 && strstr(val[0], "APGPS") != NULL)
+			int num = 0;
+			if (ret == 1)
+			{
+				num = parse_fields(buffer, val);
+			}
+			else if (ret == 2) /* APANT1 */
+			{
+				if (!fANT1) fANT1 = set_output_file(fname, "-ant1.log");
+				if (fANT1)
+				{
+					fwrite(a1buff.buf + a1buff.loc[1] + 1, sizeof(char), a1buff.nlen, fANT1);
+				}
+				isOK = 1;
+			}
+			else if (ret == 3) /* APANT2 */
+			{
+				if (!fANT2) fANT2 = set_output_file(fname, "-ant2.log");
+				if (fANT2)
+				{
+					fwrite(a1buff.buf + a1buff.loc[1] + 1, sizeof(char), a1buff.nlen, fANT2);
+				}
+				isOK = 1;
+			}
+			else if (ret == 4) /* APRTK */
+			{
+				if (!fBASE) fBASE = set_output_file(fname, "-base.log");
+				if (fBASE)
+				{
+					fwrite(a1buff.buf + a1buff.loc[1] + 1, sizeof(char), a1buff.nlen, fBASE);
+				}
+				isOK = 1;
+			}
+
+			if (!isOK && num >= 17 && strstr(val[0], "APGPS") != NULL)
 			{
 				/* time [s], lat [deg], lon [deg], ht [m], speed [m/s], heading [deg], hor. accuracy [m], ver. accuracy [m], PDOP, fixType, sat num, gps second [s], pps [s] */
 				/*
@@ -1105,7 +1181,7 @@ static int read_a1_data(const char* fname)
 				}
 				isOK = 1;
 			}
-			if (num >= 12 && strstr(val[0], "APGP2") != NULL)
+			if (!isOK && num >= 12 && strstr(val[0], "APGP2") != NULL)
 			{
 				/*
 #APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,1.1400,3,26,0.0600,180.0000,0*07
@@ -1144,7 +1220,7 @@ static int read_a1_data(const char* fname)
 				}
 				isOK = 1;
 			}
-			if (num >= 12 && strstr(val[0], "APIMU") != NULL)
+			if (!isOK && num >= 12 && strstr(val[0], "APIMU") != NULL)
 			{
 				/*
 				#APIMU,318214.937,0.0344,-0.0128,1.0077,-0.0817,0.0013,-0.0038,0.01051,0.0000,318214.548,47.0547*55
@@ -1168,7 +1244,7 @@ static int read_a1_data(const char* fname)
 				}
 				isOK = 1;
 			}
-			if (num >= 14 && strstr(val[0], "APINS") != NULL)
+			if (!isOK && num >= 14 && strstr(val[0], "APINS") != NULL)
 			{
 				/* time[s], lat[radian], lon[radian], ht[m], vn[m / s], ve[m / s], vd[m / s], roll[deg], pitch[deg], yaw[deg] */
 				/*
@@ -1209,7 +1285,7 @@ static int read_a1_data(const char* fname)
 			}
 			if (!isOK)
 			{
-				printf("%s\n", val[0]);
+				printf("%s\n", a1buff.buf);
 			}
 			a1buff.nbyte = 0;
 		}
@@ -1222,6 +1298,9 @@ static int read_a1_data(const char* fname)
 	if (fGP2_CSV) fclose(fGP2_CSV);
 	if (fGPS_GGA) fclose(fGPS_GGA);
 	if (fGP2_GGA) fclose(fGP2_GGA);
+	if (fANT1) fclose(fANT1);
+	if (fANT2) fclose(fANT2);
+	if (fBASE) fclose(fBASE);
 	return 0;
 }
 
@@ -1239,9 +1318,11 @@ double lat2local(double lat, double* lat2north)
 }
 int main(int argc, char** argv)
 {
-	//double sn = 0, se = lat2local(37.398872080488 * D2R, &sn);
 	if (argc < 3)
 	{
+		/* */
+		printf("%s format filename\n", argv[0]);
+		printf("format => a1, oxts\n");
 		//decode_a1_asc_file_ins("D:\\data\\GlencoeSkiCentre\\ins.csv");
 		//decode_a1_asc_file_gps("D:\\data\\GlencoeSkiCentre\\gps.csv");
 		//decode_a1_asc_file_imu("D:\\data\\GlencoeSkiCentre\\imu.csv");
@@ -1249,11 +1330,27 @@ int main(int argc, char** argv)
 		//read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_24drive2");
 		//read_a1_data("D:\\austin\\UpsideDownWithLeverArmMeasurements\\2022_8_5_1525_102drive2");
 		//read_a1_data("D:\\austin\\X-Y-Z test\\2022_8_9_1120_24drive1.txt");
-		read_a1_data("D:\\austin\\X-Y-Z test\\2022_8_9_1120_102drive1.txt");
+		//read_a1_data("D:\\austin\\X-Y-Z test\\2022_8_9_1120_102drive1.txt");
+		//read_a1_data("D:\\John deere drive test\\output_date_2022_8_9_time_5_29_54_SN_202200000100.txt");
+		//read_a1_data("D:\\John deere drive test\\output_date_2022_8_9_time_6_32_58_SN_202200000100.txt");
+		//read_a1_data("D:\\John deere drive test\\output_date_2022_8_9_time_7_1_25_SN_202200000100.txt");
+		//read_a1_data("D:\\John deere drive test\\output_date_2022_8_9_time_7_28_21_SN_202200000100.txt");
+		//decode_a1_asc_file_gps("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\gps.csv");
+		//decode_a1_asc_file_imu("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\imu.csv");
+		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
+		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
 	}
 	else
 	{
-		merge_data_file(argv[1], argv[2]);
+		if (strstr(argv[1], "a1") != NULL)
+		{
+			read_a1_data(argv[2]);
+		}
+		else if (strstr(argv[1], "oxts") != NULL)
+		{
+			read_oxts_data(argv[2]);
+		}
+		//merge_data_file(argv[1], argv[2]);
 	}
 	return 0;
 }
