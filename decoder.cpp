@@ -9,6 +9,8 @@
 
 #include "NComRxC.h"
 
+#include "Msg_B2A.h"
+
 #ifndef PI
 #define	PI 3.14159265358979
 #endif
@@ -69,7 +71,8 @@ static int parse_fields(char* const buffer, char** val)
 
 	/* parse fields */
 	for (p = buffer; *p && n < MAXFIELD; p = q + 1) {
-		if ((q = strchr(p, ',')) || (q = strchr(p, '*')) || (q = strchr(p, '\n'))) {
+		if (p == NULL) break;
+		if ((q = strchr(p, ',')) || (q = strchr(p, '*')) || (q = strchr(p, '\n')) || (q = strchr(p, '\r'))) {
 			val[n++] = p; *q = '\0';
 		}
 		else break;
@@ -1084,6 +1087,53 @@ static int input_a1_data(a1buff_t* a1, uint8_t data)
 	return ret;
 }
 
+typedef struct
+{
+	uint8_t buf[MAX_BUF_LEN];
+	int nbyte;
+	int nlen; /* length of binary message */
+}a1bin_t;
+
+static int input_a1_binary(a1bin_t* a1, uint8_t data)
+{
+	int ret = 0;
+	if (a1->nbyte >= MAX_BUF_LEN) a1->nbyte = 0;
+	/* #AP */
+	if (a1->nbyte == 0 && data != 'A') a1->nbyte = 0;
+	if (a1->nbyte == 1 && data != 'P') a1->nbyte = 0;
+	if (a1->nbyte == 0)
+	{
+		if (data == 'A')
+		{
+			memset(a1, 0, sizeof(a1buff_t));
+			a1->buf[a1->nbyte++] = data;
+		}
+	}
+	else
+	{
+		a1->buf[a1->nbyte++] = data;
+		if (a1->nbyte == 6)
+		{
+			a1->nlen = (a1->buf[4] & 0x00FF) | (a1->buf[5] << 8);
+		}
+		if (a1->nlen > 0 && a1->nbyte == (6 + a1->nlen + 2))
+		{
+			/* check sum */
+			if (a1->buf[2] == 'I' && a1->buf[3] == 'M')
+				ret = 1;
+			else if (a1->buf[2] == 'G' && a1->buf[3] == 'P')
+				ret = 2;
+			else if (a1->buf[2] == 'G' && a1->buf[3] == '2')
+				ret = 3;
+			else if (a1->buf[2] == 'I' && a1->buf[3] == 'N')
+				ret = 4;
+			else
+				ret = -1;
+		}
+	}
+	return ret;
+}
+
 /* read A1 file*/
 static int read_a1_data(const char* fname)
 {
@@ -1099,9 +1149,11 @@ static int read_a1_data(const char* fname)
 	FILE* fANT1 = NULL;
 	FILE* fANT2 = NULL;
 	FILE* fBASE = NULL;
+	FILE* fASC = NULL;
 	char* val[MAXFIELD];
 	a1buff_t a1buff = { 0 };
-	char* buffer = (char*)a1buff.buf;
+	a1bin_t a1bin = { 0 };
+	char a1ascbuf[4096] = { 0 };
 	while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF)
 	{
 		int ret = input_a1_data(&a1buff, data);
@@ -1111,7 +1163,7 @@ static int read_a1_data(const char* fname)
 			int num = 0;
 			if (ret == 1)
 			{
-				num = parse_fields(buffer, val);
+				num = parse_fields((char*)a1buff.buf, val);
 			}
 			else if (ret == 2) /* APANT1 */
 			{
@@ -1289,6 +1341,17 @@ static int read_a1_data(const char* fname)
 			}
 			a1buff.nbyte = 0;
 		}
+		/* decode binary message */
+		ret = input_a1_binary(&a1bin, data);
+		if (ret)
+		{
+			char* temp = (char*)a1ascbuf;
+			temp = Convert_Message_B2A((void*)a1bin.buf);
+			if (!fASC) fASC = set_output_file(fname, "-asc.txt");
+			printf("%c%c%c%c,%i,%i\n", a1bin.buf[0], a1bin.buf[1], a1bin.buf[2], a1bin.buf[3], a1bin.nlen, a1bin.nbyte);
+			if (fASC) fprintf(fASC, "%s", temp);
+			a1bin.nbyte = 0;
+		}
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
@@ -1301,6 +1364,7 @@ static int read_a1_data(const char* fname)
 	if (fANT1) fclose(fANT1);
 	if (fANT2) fclose(fANT2);
 	if (fBASE) fclose(fBASE);
+	if (fASC) fclose(fASC);
 	return 0;
 }
 
@@ -1339,6 +1403,8 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_imu("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\imu.csv");
 		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
 		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
+		//read_a1_data("D:\\austin\\output_date_2022_8_15_time_17_5_38_SN_202200000115.txt");
+		read_a1_data("D:\\austin\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
 	}
 	else
 	{
