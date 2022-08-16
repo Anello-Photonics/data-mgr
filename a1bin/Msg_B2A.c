@@ -427,6 +427,9 @@ char * Convert_Message_B2A(void *ipMsg)
     if(cPtr[MSG_HEADER_SIZE+length]!=ck_a)
     {
         strcpy((char*)outputMsgStr, "Wrong message checksum\n");
+#ifdef _DEBUG
+        printf("Wrong message checksum\n");
+#endif
         return (char*)outputMsgStr;
     }
 #endif

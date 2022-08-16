@@ -1116,7 +1116,7 @@ static int input_a1_binary(a1bin_t* a1, uint8_t data)
 		{
 			a1->nlen = (a1->buf[4] & 0x00FF) | (a1->buf[5] << 8);
 		}
-		if (a1->nlen > 0 && a1->nbyte == (6 + a1->nlen + 2))
+		if (a1->nlen > 0 && a1->nbyte == (6 + a1->nlen + 1))
 		{
 			/* check sum */
 			if (a1->buf[2] == 'I' && a1->buf[3] == 'M')
@@ -1348,7 +1348,7 @@ static int read_a1_data(const char* fname)
 			char* temp = (char*)a1ascbuf;
 			temp = Convert_Message_B2A((void*)a1bin.buf);
 			if (!fASC) fASC = set_output_file(fname, "-asc.txt");
-			printf("%c%c%c%c,%i,%i\n", a1bin.buf[0], a1bin.buf[1], a1bin.buf[2], a1bin.buf[3], a1bin.nlen, a1bin.nbyte);
+			//printf("%c%c%c%c,%i,%i\n", a1bin.buf[0], a1bin.buf[1], a1bin.buf[2], a1bin.buf[3], a1bin.nlen, a1bin.nbyte);
 			if (fASC) fprintf(fASC, "%s", temp);
 			a1bin.nbyte = 0;
 		}
@@ -1403,8 +1403,8 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_imu("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\imu.csv");
 		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
 		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
-		//read_a1_data("D:\\austin\\output_date_2022_8_15_time_17_5_38_SN_202200000115.txt");
-		read_a1_data("D:\\austin\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
+		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115.txt");
+		read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
 	}
 	else
 	{
