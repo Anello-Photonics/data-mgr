@@ -9,7 +9,9 @@
 
 #include "NComRxC.h"
 
+#ifdef _ANELLO_BIN_
 #include "Msg_B2A.h"
+#endif
 
 #ifndef PI
 #define	PI 3.14159265358979
@@ -1086,7 +1088,7 @@ static int input_a1_data(a1buff_t* a1, uint8_t data)
 	}
 	return ret;
 }
-
+#ifdef _ANELLO_BIN_
 typedef struct
 {
 	uint8_t buf[MAX_BUF_LEN];
@@ -1133,7 +1135,7 @@ static int input_a1_binary(a1bin_t* a1, uint8_t data)
 	}
 	return ret;
 }
-
+#endif
 /* read A1 file*/
 static int read_a1_data(const char* fname)
 {
@@ -1152,8 +1154,10 @@ static int read_a1_data(const char* fname)
 	FILE* fASC = NULL;
 	char* val[MAXFIELD];
 	a1buff_t a1buff = { 0 };
+#ifdef _ANELLO_BIN_
 	a1bin_t a1bin = { 0 };
 	char a1ascbuf[4096] = { 0 };
+#endif
 	while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF)
 	{
 		int ret = input_a1_data(&a1buff, data);
@@ -1341,6 +1345,7 @@ static int read_a1_data(const char* fname)
 			}
 			a1buff.nbyte = 0;
 		}
+#ifdef _ANELLO_BIN_
 		/* decode binary message */
 		ret = input_a1_binary(&a1bin, data);
 		if (ret)
@@ -1352,6 +1357,7 @@ static int read_a1_data(const char* fname)
 			if (fASC) fprintf(fASC, "%s", temp);
 			a1bin.nbyte = 0;
 		}
+#endif
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
@@ -1364,7 +1370,9 @@ static int read_a1_data(const char* fname)
 	if (fANT1) fclose(fANT1);
 	if (fANT2) fclose(fANT2);
 	if (fBASE) fclose(fBASE);
+#ifdef _ANELLO_BIN_
 	if (fASC) fclose(fASC);
+#endif
 	return 0;
 }
 
@@ -1404,7 +1412,7 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
 		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
 		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115.txt");
-		read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
+		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
 	}
 	else
 	{
