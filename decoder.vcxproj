@@ -20,12 +20,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="a1bin\Msg_B2A.c" />
+    <ClCompile Include="artcm\artcm.c" />
     <ClCompile Include="decoder.cpp" />
     <ClCompile Include="oxts\NComRxC.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="a1bin\Message_def.h" />
     <ClInclude Include="a1bin\Msg_B2A.h" />
+    <ClInclude Include="artcm\artcm.h" />
     <ClInclude Include="oxts\NComRxC.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -102,7 +104,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>oxts\;a1bin\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>oxts\;a1bin\;artcm\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -119,7 +121,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>oxts\;a1bin\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>oxts\;a1bin\;artcm\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -136,7 +138,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>oxts\;a1bin\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>oxts\;a1bin\;artcm\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -153,7 +155,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>oxts\;a1bin\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>oxts\;a1bin\;artcm\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>

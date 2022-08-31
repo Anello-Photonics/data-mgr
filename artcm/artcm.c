@@ -110,7 +110,8 @@ extern int encode_rtcm3_ins(uint8_t *buff, ins_t *ins)
     setbitu(buff,i,10,0          ); i+=10;
 
     /* data message body */
-    setbitu(buff,i,12,4          ); i+=12; /* message ID */
+    setbitu(buff,i,12,999        ); i+=12; /* message ID */
+    setbitu(buff,i, 4,4          ); i+= 4; /* sub message ID 1 => IMU, 2 => GPS PVT, 3 => GPS Heading, 4 => INS */
 	/* put all the other data field */
 
     
