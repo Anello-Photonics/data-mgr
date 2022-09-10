@@ -1029,11 +1029,11 @@ static int input_a1_data(a1buff_t* a1, uint8_t data)
 	int ret = 0;
 	if (a1->nbyte >= MAX_BUF_LEN) a1->nbyte = 0;
 	/* #AP */
-	if (a1->nbyte == 1 && data != 'A') a1->nbyte = 0;
-	if (a1->nbyte == 2 && data != 'P') a1->nbyte = 0;
+	if (a1->nbyte == 1 && !((data == 'A'&& a1->buf[0] == '#') || (data == 'G' && a1->buf[0] == '$'))) a1->nbyte = 0;
+	//if (a1->nbyte == 2 && data != 'P') a1->nbyte = 0;
 	if ( a1->nbyte == 0 )
 	{
-		if (data == '#')
+		if (data == '#'||data=='$')
 		{
 			memset(a1, 0, sizeof(a1buff_t));
 			//a1->nseg = a1->nlen = 0;
@@ -1144,6 +1144,7 @@ static int read_a1_data(const char* fname)
 	FILE* fCSV = NULL;
 	FILE* fGGA = NULL;
 	FILE* fIMU = NULL;
+	FILE* fLOG_GGA = NULL;
 	FILE* fGPS_CSV = NULL;
 	FILE* fGP2_CSV = NULL;
 	FILE* fGPS_GGA = NULL;
@@ -1163,6 +1164,17 @@ static int read_a1_data(const char* fname)
 		int ret = input_a1_data(&a1buff, data);
 		if (ret)
 		{
+			if (strstr((char*)a1buff.buf, "$G") != NULL)
+			{
+				if (!fLOG_GGA) fLOG_GGA = set_output_file(fname, "-src.nmea");
+				if (fLOG_GGA)
+				{
+					fprintf(fLOG_GGA, "%s", (char*)a1buff.buf);
+				}
+				a1buff.nbyte = 0;
+				continue;
+			}
+
 			int isOK = 0;
 			int num = 0;
 			if (ret == 1)
@@ -1370,6 +1382,7 @@ static int read_a1_data(const char* fname)
 	if (fANT1) fclose(fANT1);
 	if (fANT2) fclose(fANT2);
 	if (fBASE) fclose(fBASE);
+	if (fLOG_GGA) fclose(fLOG_GGA);
 #ifdef _ANELLO_BIN_
 	if (fASC) fclose(fASC);
 #endif
