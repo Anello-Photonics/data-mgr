@@ -1,0 +1,23 @@
+﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(520,5): warning MSB8004: Output Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Output Directory.
+  decoder.cpp
+C:\projects\decoder\decoder.cpp(238,34): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(353,13): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(372,72): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(372,47): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(564,10): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(590,44): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(619,10): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(646,44): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(861,10): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(869,10): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(874,75): warning C4244: 'argument': conversion from 'const double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(874,43): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(1054,21): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(1237,77): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(1237,68): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(1237,51): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(1276,77): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(1276,68): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+C:\projects\decoder\decoder.cpp(1276,51): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\projects\decoder\decoder.cpp(1339,51): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+  decoder.vcxproj -> C:\projects\decoder\decoder.exe
