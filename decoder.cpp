@@ -9,10 +9,6 @@
 
 #include "NComRxC.h"
 
-#ifdef _ANELLO_BIN_
-#include "Msg_B2A.h"
-#endif
-
 #ifndef PI
 #define	PI 3.14159265358979
 #endif
@@ -1047,7 +1043,7 @@ static int input_a1_data(a1buff_t* a1, uint8_t data)
 			a1->loc[a1->nseg++] = a1->nbyte;
 			if (a1->nseg == 2)
 			{
-				if (strstr((char*)a1->buf, "APANT") != NULL|| strstr((char*)a1->buf, "APRTK") != NULL)
+				if (strstr((char*)a1->buf, "APANT") != NULL || strstr((char*)a1->buf, "APRTK") != NULL)
 				{
 					uint8_t* temp = a1->buf + (a1->loc[0]) + 1;
 					a1->nlen = atof((char*)temp);
@@ -1088,54 +1084,7 @@ static int input_a1_data(a1buff_t* a1, uint8_t data)
 	}
 	return ret;
 }
-#ifdef _ANELLO_BIN_
-typedef struct
-{
-	uint8_t buf[MAX_BUF_LEN];
-	int nbyte;
-	int nlen; /* length of binary message */
-}a1bin_t;
 
-static int input_a1_binary(a1bin_t* a1, uint8_t data)
-{
-	int ret = 0;
-	if (a1->nbyte >= MAX_BUF_LEN) a1->nbyte = 0;
-	/* #AP */
-	if (a1->nbyte == 0 && data != 'A') a1->nbyte = 0;
-	if (a1->nbyte == 1 && data != 'P') a1->nbyte = 0;
-	if (a1->nbyte == 0)
-	{
-		if (data == 'A')
-		{
-			memset(a1, 0, sizeof(a1buff_t));
-			a1->buf[a1->nbyte++] = data;
-		}
-	}
-	else
-	{
-		a1->buf[a1->nbyte++] = data;
-		if (a1->nbyte == 6)
-		{
-			a1->nlen = (a1->buf[4] & 0x00FF) | (a1->buf[5] << 8);
-		}
-		if (a1->nlen > 0 && a1->nbyte == (6 + a1->nlen + 1))
-		{
-			/* check sum */
-			if (a1->buf[2] == 'I' && a1->buf[3] == 'M')
-				ret = 1;
-			else if (a1->buf[2] == 'G' && a1->buf[3] == 'P')
-				ret = 2;
-			else if (a1->buf[2] == 'G' && a1->buf[3] == '2')
-				ret = 3;
-			else if (a1->buf[2] == 'I' && a1->buf[3] == 'N')
-				ret = 4;
-			else
-				ret = -1;
-		}
-	}
-	return ret;
-}
-#endif
 /* read A1 file*/
 static int read_a1_data(const char* fname)
 {
@@ -1155,10 +1104,7 @@ static int read_a1_data(const char* fname)
 	FILE* fASC = NULL;
 	char* val[MAXFIELD];
 	a1buff_t a1buff = { 0 };
-#ifdef _ANELLO_BIN_
-	a1bin_t a1bin = { 0 };
-	char a1ascbuf[4096] = { 0 };
-#endif
+
 	while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF)
 	{
 		int ret = input_a1_data(&a1buff, data);
@@ -1216,8 +1162,8 @@ static int read_a1_data(const char* fname)
 #APGPS,318213.135,1343773580500184320,37.3988755,-121.9791327,-27.9650,1.9240,0.0110,0.0000,0.2380,0.3820,0.9700,3,29,0.0820,180.0000,0*65
 				*/
 				double gps[20] = { 0 };
-				gps[0] = atof(val[1]) * 1.0e-3; /* time MCU */
-				gps[1] = atof(val[2]); /* GPS ns */
+				gps[0] = atof(val[1]); /* time MCU */
+				gps[1] = atof(val[2])*1.0e-6; /* GPS ms */
 
 				gps[2] = atof(val[3]); /* lat */
 				gps[3] = atof(val[4]); /* lon */
@@ -1234,10 +1180,13 @@ static int read_a1_data(const char* fname)
 				gps[13] = atof(val[14]); /* acc speed */
 				gps[14] = atof(val[15]); /* acc heading */
 				gps[15] = atof(val[16]); /* rtk fix status */
-				if (!fGPS_CSV) fGPS_CSV = set_output_file(fname, "-gps.csv");
+				if (!fGPS_CSV){
+					fGPS_CSV = set_output_file(fname, "-gps.csv");
+					if (fGPS_CSV) fprintf(fGPS_CSV, "Time_MCU_ms,GPS_time_ms,lat,lon,alt_ellipsoidal,speed,heading,acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,acc_heading,rtk_fix\n");
+				}
 				if (fGPS_CSV)
 				{
-					fprintf(fGPS_CSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", gps[0], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
+					fprintf(fGPS_CSV, "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", gps[0],gps[1], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
 				}
 				if (!fGPS_GGA) fGPS_GGA = set_output_file(fname, "-gps.nmea");
 				if (fGPS_GGA)
@@ -1255,8 +1204,8 @@ static int read_a1_data(const char* fname)
 #APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,1.1400,3,26,0.0600,180.0000,0*07
 				*/
 				double gps[20] = { 0 };
-				gps[0] = atof(val[1]) * 1.0e-3; /* time MCU */
-				gps[1] = atof(val[2]); /* GPS ns */
+				gps[0] = atof(val[1]); /* time MCU */
+				gps[1] = atof(val[2])*1.0e-6; /* GPS ms */
 
 				gps[2] = atof(val[3]); /* lat */
 				gps[3] = atof(val[4]); /* lon */
@@ -1273,10 +1222,13 @@ static int read_a1_data(const char* fname)
 				gps[13] = atof(val[14]); /* acc speed */
 				gps[14] = atof(val[15]); /* acc heading */
 				gps[15] = atof(val[16]); /* rtk fix status */
-				if (!fGP2_CSV) fGP2_CSV = set_output_file(fname, "-gp2.csv");
+				if (!fGP2_CSV) {
+					fGP2_CSV = set_output_file(fname, "-gp2.csv"); 
+					if (fGP2_CSV) fprintf(fGP2_CSV, "Time_MCU_ns,GPS_time_ms,lat,lon,alt_ellipsoidal,speed,heading,acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,acc_heading,rtk_fix\n");
+				}
 				if (fGP2_CSV)
 				{
-					fprintf(fGP2_CSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", gps[0], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
+					fprintf(fGP2_CSV, "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", gps[0], gps[1], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
 				}
 				if (!fGP2_GGA) fGP2_GGA = set_output_file(fname, "-gp2.nmea");
 				if (fGP2_GGA)
@@ -1294,7 +1246,7 @@ static int read_a1_data(const char* fname)
 				#APIMU,318214.937,0.0344,-0.0128,1.0077,-0.0817,0.0013,-0.0038,0.01051,0.0000,318214.548,47.0547*55
 				*/
 				double imu[20] = { 0 };
-				imu[0] = atof(val[1]) * 1.0e-3;
+				imu[0] = atof(val[1]); /* imu time ms*/
 				imu[1] = atof(val[2]); /* fx */
 				imu[2] = atof(val[3]); /* fy */
 				imu[3] = atof(val[4]); /* fz */
@@ -1305,7 +1257,10 @@ static int read_a1_data(const char* fname)
 				imu[8] = atof(val[9]); /* odr */
 				imu[9] = atof(val[10]) * 1.0e-3; /* odr time */
 				imu[10] = atof(val[11]); /* temp */
-				if (!fIMU) fIMU = set_output_file(fname, "-imu.csv");
+				if (!fIMU) { 
+					fIMU = set_output_file(fname, "-imu.csv");
+					if (fIMU) fprintf(fIMU, "imu_time_ms,fx,fy,fz,wx,wy,wz,wz_fog,odr,odr_time,temp\n");
+				}
 				if (fIMU)
 				{
 					fprintf(fIMU, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", imu[0], imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
@@ -1319,27 +1274,30 @@ static int read_a1_data(const char* fname)
 				#APINS,318215,1343773580502990592,1,37.398875500000,-121.979132700000,-27.965002059937,,,,-0.166232,1.773182,0.250746,1*74
 				*/
 				double ins[20] = { 0 };
-				ins[0] = atof(val[1]) * 1.0e-3;
-				ins[1] = atof(val[2]);
-				ins[2] = atof(val[3]);
+				ins[0] = atof(val[1]);			//IMUtime (ms)
+				ins[1] = atof(val[2]) * 1.0e-6;	//GPStime (ms)
+				ins[2] = atof(val[3]);			//INS solution
 
-				ins[3] = atof(val[4]);
-				ins[4] = atof(val[5]);
-				ins[5] = atof(val[6]);
+				ins[3] = atof(val[4]);			//lat
+				ins[4] = atof(val[5]);			//lon
+				ins[5] = atof(val[6]);			//alt
 
-				ins[6] = atof(val[7]);
-				ins[7] = atof(val[8]);
-				ins[8] = atof(val[9]);
+				ins[6] = atof(val[7]);			//vn
+				ins[7] = atof(val[8]);			//ve
+				ins[8] = atof(val[9]);			//vd
 
-				ins[9] = atof(val[10]);
-				ins[10] = atof(val[11]);
-				ins[11] = atof(val[12]);
+				ins[9] = atof(val[10]);			//roll
+				ins[10] = atof(val[11]);		//pitch
+				ins[11] = atof(val[12]);		//heading
 
-				ins[12] = atof(val[13]);
-				if (!fCSV) fCSV = set_output_file(fname, "-rts.csv");
+				ins[12] = atof(val[13]);		//ZUPT
+				if (!fCSV) {
+					fCSV = set_output_file(fname, "-rts.csv");
+					if (fCSV) fprintf(fCSV, "imu_time_ms,GPS_time_ms,lat,lon,alt,vn,ve,vd,roll,pitch,heading,INS_solution\n");
+				}
 				if (fCSV)
 				{
-					fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", ins[0], ins[3], ins[4], ins[5], ins[6], ins[7], ins[8], ins[9], ins[10], ins[11], ins[2]);
+					fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", ins[0],ins[1], ins[3], ins[4], ins[5], ins[6], ins[7], ins[8], ins[9], ins[10], ins[11], ins[2]);
 				}
 				if (!fGGA) fGGA = set_output_file(fname, "-rts.nmea");
 				if (fGGA)
@@ -1357,19 +1315,6 @@ static int read_a1_data(const char* fname)
 			}
 			a1buff.nbyte = 0;
 		}
-#ifdef _ANELLO_BIN_
-		/* decode binary message */
-		ret = input_a1_binary(&a1bin, data);
-		if (ret)
-		{
-			char* temp = (char*)a1ascbuf;
-			temp = Convert_Message_B2A((void*)a1bin.buf);
-			if (!fASC) fASC = set_output_file(fname, "-asc.txt");
-			//printf("%c%c%c%c,%i,%i\n", a1bin.buf[0], a1bin.buf[1], a1bin.buf[2], a1bin.buf[3], a1bin.nlen, a1bin.nbyte);
-			if (fASC) fprintf(fASC, "%s", temp);
-			a1bin.nbyte = 0;
-		}
-#endif
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
@@ -1383,9 +1328,6 @@ static int read_a1_data(const char* fname)
 	if (fANT2) fclose(fANT2);
 	if (fBASE) fclose(fBASE);
 	if (fLOG_GGA) fclose(fLOG_GGA);
-#ifdef _ANELLO_BIN_
-	if (fASC) fclose(fASC);
-#endif
 	return 0;
 }
 
@@ -1424,7 +1366,9 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_imu("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\imu.csv");
 		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
 		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
-		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115.txt");
+		read_a1_data("C:\\projects\\driveData\\2022\\October_10\\27\\2\\output_date_2022_10_27_time_17_58_56_SN_202100000024.txt");
+		//read_a1_data("C:\\projects\\driveData\\Validation\\drivetests\\garage1\\output_date_2022_10_26_time_15_55_32_SN_202100000024.txt");
+		//read_a1_data("C:\\projects\\driveData\\PNTAX2022\\DAY1\\DAY1\\ShortJam\\day1_shortjam_2.txt");
 		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
 	}
 	else
