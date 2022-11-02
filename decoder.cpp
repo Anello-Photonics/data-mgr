@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "NComRxC.h"
+#include "Message_def.h"
 
 #ifndef PI
 #define	PI 3.14159265358979
@@ -61,6 +62,23 @@ typedef struct
 }pvt_imu_dat_t;
 
 #define MAXFIELD 100
+
+
+//returns true if the checksum is correct
+static int verify_checksum(char* buf) {
+	char* q, * msg_ck, sum;
+	char ck[10] = { '\0' };
+	int i = 0;
+
+	for (q = (char*)buf + 1, sum = 0; *q != '*' && *q; q++) {
+		sum ^= *q;
+	}
+
+	sprintf(ck, "%02X", sum);
+
+	msg_ck = strchr(buf, '*') + 1;
+	return (msg_ck[0] == ck[0] && msg_ck[1] == ck[1]) ? 1 : 0;
+}
 
 static int parse_fields(char* const buffer, char** val)
 {
@@ -163,7 +181,7 @@ static int add_buff(nmea_buff_t* buff, uint8_t data)
 			buff->dat[buff->nbyte++] = data;
 		}
 	}
-	else 
+	else
 	{
 		buff->dat[buff->nbyte++] = data;
 	}
@@ -243,7 +261,7 @@ int found_time_offset(const char* imufname, double *time_offset)
 	}
 }
 
-/* septentrio asc solution 
+/* septentrio asc solution
 * -1: PVTGeodetic block
 Col1:  -1
 Col2:  time (GPS second since Jan 06, 1980)
@@ -561,7 +579,7 @@ static int decode_a1_asc_file_ins(const char* fname)
 		double ws = atof(val[1])*1.0e-9;
 		int wk = floor(ws) / (7 * 24 * 3600);
 		ws -= wk * 7 * 24 * 3600;
-		int status = atoi(val[2]); 
+		int status = atoi(val[2]);
 		double blh[3] = { 0 };
 		blh[0] = atof(val[3]) * D2R; /* lat */
 		blh[1] = atof(val[4]) * D2R; /* lon */
@@ -701,7 +719,7 @@ imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_
 
 int merge_data_file(const char* imufname, const char *gpsfname)
 {
-	FILE* fIMU = NULL; 
+	FILE* fIMU = NULL;
 	FILE* fOUT = NULL;
 
 	printf("%s\n%s\n", imufname, gpsfname);
@@ -975,13 +993,13 @@ static int read_oxts_data(const char* fname)
 			// for falling edge input triggers then output to trigger file.
 			switch (nrx->mOutputPacketType)
 			{
-			case OUTPUT_PACKET_REGULAR: 
+			case OUTPUT_PACKET_REGULAR:
 			{
 
 				if (!fCSV) fCSV = set_output_file(fname, "-rts.csv");
 				if (!fGGA) fGGA = set_output_file(fname, "-rts.nmea");
 
-				print(fCSV, fGGA, nrx); 
+				print(fCSV, fGGA, nrx);
 				break;
 			}
 			case OUTPUT_PACKET_IN1DOWN:
@@ -1110,6 +1128,18 @@ static int read_a1_data(const char* fname)
 		int ret = input_a1_data(&a1buff, data);
 		if (ret)
 		{
+			if (strstr((char*)a1buff.buf, "*") == NULL) {
+				printf("no checksum: %s\n", a1buff.buf);
+				a1buff.nbyte = 0;
+				continue;
+			}
+
+			if (!verify_checksum((char*)a1buff.buf)) {
+				printf("checksum fail: %s\n", a1buff.buf);
+				a1buff.nbyte = 0;
+				continue;
+			}
+
 			if (strstr((char*)a1buff.buf, "$G") != NULL)
 			{
 				if (!fLOG_GGA) fLOG_GGA = set_output_file(fname, "-src.nmea");
@@ -1155,7 +1185,7 @@ static int read_a1_data(const char* fname)
 				isOK = 1;
 			}
 
-			if (!isOK && num >= 17 && strstr(val[0], "APGPS") != NULL)
+			if (!isOK && num == 18 && strstr(val[0], "APGPS") != NULL)
 			{
 				/* time [s], lat [deg], lon [deg], ht [m], speed [m/s], heading [deg], hor. accuracy [m], ver. accuracy [m], PDOP, fixType, sat num, gps second [s], pps [s] */
 				/*
@@ -1198,11 +1228,11 @@ static int read_a1_data(const char* fname)
 				}
 				isOK = 1;
 			}
-			if (!isOK && num >= 12 && strstr(val[0], "APGP2") != NULL)
-			{
+			if (!isOK && num >= 17 && strstr(val[0], "APGP2") != NULL) {
 				/*
 #APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,1.1400,3,26,0.0600,180.0000,0*07
 				*/
+
 				double gps[20] = { 0 };
 				gps[0] = atof(val[1]); /* time MCU */
 				gps[1] = atof(val[2])*1.0e-6; /* GPS ms */
@@ -1211,7 +1241,6 @@ static int read_a1_data(const char* fname)
 				gps[3] = atof(val[4]); /* lon */
 				gps[4] = atof(val[5]); /* ht */
 				gps[5] = atof(val[6]); /* msl */
-
 				gps[6] = atof(val[7]); /* speed */
 				gps[7] = atof(val[8]); /* heading */
 				gps[8] = atof(val[9]); /* acc_h */
@@ -1223,7 +1252,7 @@ static int read_a1_data(const char* fname)
 				gps[14] = atof(val[15]); /* acc heading */
 				gps[15] = atof(val[16]); /* rtk fix status */
 				if (!fGP2_CSV) {
-					fGP2_CSV = set_output_file(fname, "-gp2.csv"); 
+					fGP2_CSV = set_output_file(fname, "-gp2.csv");
 					if (fGP2_CSV) fprintf(fGP2_CSV, "Time_MCU_ns,GPS_time_ms,lat,lon,alt_ellipsoidal,speed,heading,acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,acc_heading,rtk_fix\n");
 				}
 				if (fGP2_CSV)
@@ -1257,7 +1286,7 @@ static int read_a1_data(const char* fname)
 				imu[8] = atof(val[9]); /* odr */
 				imu[9] = atof(val[10]) * 1.0e-3; /* odr time */
 				imu[10] = atof(val[11]); /* temp */
-				if (!fIMU) { 
+				if (!fIMU) {
 					fIMU = set_output_file(fname, "-imu.csv");
 					if (fIMU) fprintf(fIMU, "imu_time_ms,fx,fy,fz,wx,wy,wz,wz_fog,odr,odr_time,temp\n");
 				}
@@ -1311,7 +1340,7 @@ static int read_a1_data(const char* fname)
 			}
 			if (!isOK)
 			{
-				printf("%s\n", a1buff.buf);
+				printf("No correct data %s\n", a1buff.buf);
 			}
 			a1buff.nbyte = 0;
 		}
@@ -1366,7 +1395,7 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_imu("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\imu.csv");
 		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
 		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
-		read_a1_data("C:\\projects\\driveData\\2022\\October_10\\27\\2\\output_date_2022_10_27_time_17_58_56_SN_202100000024.txt");
+		read_a1_data("C:\\projects\\driveData\\2022\\October_10\\28\\output_date_2022_10_28_time_17_19_7_SN_202100000024.txt");
 		//read_a1_data("C:\\projects\\driveData\\Validation\\drivetests\\garage1\\output_date_2022_10_26_time_15_55_32_SN_202100000024.txt");
 		//read_a1_data("C:\\projects\\driveData\\PNTAX2022\\DAY1\\DAY1\\ShortJam\\day1_shortjam_2.txt");
 		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
