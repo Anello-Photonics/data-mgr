@@ -49,7 +49,7 @@ extern uint32_t crc24q(const uint8_t *buff, int len)
     uint32_t crc=0;
     int i;
    
-    for (i=0;i<len;i++) crc=((crc<<8)&0xFFFFFF)^tbl_CRC24Q[(crc>>16)^buff[i]];
+    for (i=0;i<len;i++) crc=((crc<<8)&0xFFFFFF)^tbl_CRC24Q[(crc>>16)^(buff[i]&0xff)];
     return crc;
 }
 

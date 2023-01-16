@@ -10,6 +10,8 @@
 #include "NComRxC.h"
 #include "Message_def.h"
 
+#include "artcm.h"
+
 #ifndef PI
 #define	PI 3.14159265358979
 #endif
@@ -1372,13 +1374,415 @@ double lat2local(double lat, double* lat2north)
 	*lat2north = Rm;
 	return Rn * clat;
 }
+
+
+
+
+
+
+
+static int rtcm_verify_crc(rtcm_msg_t *msg, uint16_t len, uint8_t *crc_bytes, uint8_t crc_len)
+{
+	uint8_t temp = 0;
+	// Will store the crc from the received packet to be compared to the one we calculate
+	uint32_t packet_crc = 0;
+
+	// To calculate the crc correctly, we must reflip the length and message number fields that we read in backwards at the start
+	temp = msg->packet[1];
+	msg->packet[1] = msg->packet[2];
+	msg->packet[2] = temp;
+
+	temp = msg->packet[3];
+	msg->packet[3] = msg->packet[4];
+	msg->packet[4] = temp;
+
+	uint32_t crc = crc24q(msg->packet, len);
+
+	// Flip it back in case we want to use these fields later I guess
+	temp = msg->packet[1];
+	msg->packet[1] = msg->packet[2];
+	msg->packet[2] = temp;
+
+	temp = msg->packet[3];
+	msg->packet[3] = msg->packet[4];
+	msg->packet[4] = temp;
+
+	// Convert the 3 crc bytes from the packet into a uint32_t to be compared with the result from crc24q
+	if (crc_len == 3)
+	{
+		packet_crc = (uint32_t)crc_bytes[0] << 16;
+		packet_crc |= (uint32_t)crc_bytes[1] << 8;
+		packet_crc |= (uint32_t)crc_bytes[2];
+	}
+
+	// Returns 1 on success
+	return crc == packet_crc ? 1 : 0;
+}
+
+// Returns the rtcm message type
+// Returns 0 if the message was invalid
+static int read_rtcm_message(FILE* file, rtcm_msg_t *msg)
+{
+	fpos_t current_pos = 0;
+	uint16_t message_num = 0;
+	uint8_t sub_type = 0;
+
+	// If the message is invalid, we should return the file back to the position it started.
+	fgetpos(file, &current_pos);
+
+	// Read the first 5 bytes in order to see if the message is valid
+	// Preamble and then 2 length bytes
+	msg->packet[0] = 0xD3;
+	// The length of the wrapper is big endian so we flip these bytes
+	msg->packet[2] = fgetc(file);
+	msg->packet[1] = fgetc(file);
+	// Message number and sub type, also in big endian so flip the bytes for this too
+	msg->packet[4] = fgetc(file);
+	msg->packet[3] = fgetc(file);
+
+	// Merge the two bytes for message number and sub type
+	message_num = (uint16_t)(msg->packet[4] << 8);
+	message_num |= (uint16_t)msg->packet[3];
+
+	// Bitwise XOR with the big endian format of 4058 which should return the subtype of the message
+	sub_type = message_num ^ 0xfda0;
+
+	// Shift by 4 should give the message number (4058) this does not change for any of our messages
+	message_num >>= 4;
+
+	if (message_num == 4058 && sub_type == IMU_msg && msg->IMU_msg.length == sizeof(RTCM_msg_IMU_t))
+	{
+		// Read the rest of the packet plus the length of the crc
+		// Start at 5 since we already read the first 5 bytes above
+		for (int i = 5; i < sizeof(rtcm_IMU_t); i++)
+		{
+			// Offset by 5 since we already read the first 5 bytes above
+			msg->packet[i] = fgetc(file);
+		}
+
+		// Verify the crc matches what we calculate it should be
+		// len is 3 less than the packet size because we do not include the crc itself in the calculation
+		if (rtcm_verify_crc(msg, sizeof(rtcm_IMU_t) - sizeof(msg->IMU_msg.crc), msg->IMU_msg.crc, sizeof(msg->IMU_msg.crc)))
+		{
+			return IMU_msg;
+		}
+		else
+		{
+			printf("IMU CRC fail\r\n");
+		}
+
+			
+		
+	}
+	else if (message_num == 4058 && sub_type == PVT_msg && msg->PVT_msg.length == sizeof(RTCM_msg_PVT_t))
+	{
+		// Read the rest of the packet plus the length of the crc
+		// Start at 5 since we already read the first 5 bytes above
+		for (int i = 5; i < sizeof(rtcm_PVT_t); i++)
+		{
+			// Offset by 5 since we already read the first 5 bytes above
+			msg->packet[i] = fgetc(file);
+
+		}
+		
+		// Verify the crc matches what we calculate it should be
+		// len is 3 less than the packet size because we do not include the crc itself in the calculation
+		if (rtcm_verify_crc(msg, sizeof(rtcm_PVT_t) - sizeof(msg->PVT_msg.crc), msg->PVT_msg.crc, sizeof(msg->PVT_msg.crc)))
+		{
+			return PVT_msg;
+		}
+		else
+		{
+			printf("PVT CRC fail\r\n");
+		}
+			
+	}
+	else if (message_num == 4058 && sub_type == HDR_msg && msg->HDR_msg.length == sizeof(RTCM_msg_HDR_t))
+	{
+		// Read the rest of the packet plus the length of the crc
+		// Start at 5 since we already read the first 5 bytes above
+		for (int i = 5; i < sizeof(rtcm_HDR_t); i++)
+		{
+			// Offset by 5 since we already read the first 5 bytes above
+			msg->packet[i] = fgetc(file);
+		}
+
+		// Verify the crc matches what we calculate it should be
+		// len is 3 less than the packet size because we do not include the crc itself in the calculation
+		if (rtcm_verify_crc(msg, sizeof(rtcm_HDR_t) - sizeof(msg->HDR_msg.crc), msg->HDR_msg.crc, sizeof(msg->HDR_msg.crc)))
+		{
+			return HDR_msg;
+		}
+		else
+		{
+			printf("HDR CRC fail\r\n");
+		}
+
+	}
+	else if (message_num == 4058 && sub_type == INS_msg && msg->INS_msg.length == sizeof(RTCM_msg_INS_t))
+	{
+		// Read the rest of the packet plus the length of the crc
+		// Start at 5 since we already read the first 5 bytes above
+		for (int i = 5; i < sizeof(rtcm_INS_t); i++)
+		{
+			// Offset by 5 since we already read the first 5 bytes above
+			msg->packet[i] = fgetc(file);
+		}
+
+		// Verify the crc matches what we calculate it should be
+		// len is 3 less than the packet size because we do not include the crc itself in the calculation
+		if (rtcm_verify_crc(msg, sizeof(rtcm_INS_t) - sizeof(msg->INS_msg.crc), msg->INS_msg.crc, sizeof(msg->INS_msg.crc)))
+		{
+			return INS_msg;
+		}
+		else
+		{
+			printf("INS CRC fail\r\n");
+		}
+
+	}
+	else if (message_num == 4058 && sub_type == IM1_msg && msg->IM1_msg.length == sizeof(RTCM_msg_IM1_t))
+	{
+		// Read the rest of the packet plus the length of the crc
+		// Start at 5 since we already read the first 5 bytes
+		for (int i = 5; i < sizeof(rtcm_IM1_t); i++)
+		{
+			// Offset by 5 since we already read the first 5 bytes above
+			msg->packet[i] = fgetc(file);
+		}
+
+		// Verify the crc matches what we calculate it should be
+		// len is 3 less than the packet size because we do not include the crc itself in the calculation
+		if (rtcm_verify_crc(msg, sizeof(rtcm_IM1_t) - sizeof(msg->IM1_msg.crc), msg->IM1_msg.crc, sizeof(msg->IM1_msg.crc)))
+		{
+			return IM1_msg;
+		}
+		else
+		{
+			printf("IM1 CRC fail\r\n");
+		}
+
+	}
+	else
+	{
+		// Invalid message, return file pointer to what it was initially
+		fsetpos(file, &current_pos);
+		return 0;
+	}
+
+	return 0;
+}
+
+static int read_rtcm_data(const char* fname)
+{
+	FILE* fLOG = fopen(fname, "rb"); if (!fLOG) return 0;
+	int data = 0;
+
+	FILE* fIMU = NULL;
+	FILE* fGPS = NULL;
+	FILE* fGP2 = NULL;
+	FILE* fHDR = NULL;
+	FILE* fINS = NULL;
+	FILE* fIM1 = NULL;
+	
+	rtcm_msg_t rtcm_msg = { 0 };
+
+	while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF)
+	{
+		// This is the preamble to an rtcm message
+		if (data == 0xd3)
+		{
+			// Read a single rtcm message and then write it to the correct file
+			switch (read_rtcm_message(fLOG, &rtcm_msg))
+			{
+				case (IMU_msg):
+					if (!fIMU) 
+					{
+						fIMU = set_output_file(fname, "-imu.csv");
+						if (fIMU) fprintf(fIMU, "MCU_Time,Sync_Time,ODO_Time,AX,AY,AZ,WX,WY,WZ,OG_WZ,ODO,Temp_C\n");
+					}
+
+					if (fIMU)
+					{
+						fprintf(fIMU, "%llu,%llu,%llu,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+							rtcm_msg.IMU_msg.msg.MCU_Time,
+							rtcm_msg.IMU_msg.msg.Sync_Time,
+							rtcm_msg.IMU_msg.msg.ODO_time,
+							(double)rtcm_msg.IMU_msg.msg.AX / 143165577,
+							(double)rtcm_msg.IMU_msg.msg.AY / 143165577,
+							(double)rtcm_msg.IMU_msg.msg.AZ/ 143165577,
+							(double)rtcm_msg.IMU_msg.msg.WX / 4772186,
+							(double)rtcm_msg.IMU_msg.msg.WY / 4772186,
+							(double)rtcm_msg.IMU_msg.msg.WZ / 4772186,
+							(double)rtcm_msg.IMU_msg.msg.OG_WZ / 4772186,
+							(double)rtcm_msg.IMU_msg.msg.ODO / 100,
+							(double)rtcm_msg.IMU_msg.msg.Temp_C / 100);
+					}
+
+					break;
+				case (PVT_msg):
+					// We need to split the message into two files since there are two different GNSS modules
+					if (rtcm_msg.PVT_msg.msg.Antenna_ID == 0)
+					{
+						if (!fGPS)
+						{
+							fGPS = set_output_file(fname, "-gps.csv");
+							if (fGPS) fprintf(fGPS, "Time,GPS_Time,Latitude,Longitude,Alt_Ellipsoid,Alt_MSL,Speed,Heading,		\
+												Hor_Acc,Ver_Acc,Hdg_Acc,Spd_Acc,PDOP,FixType,SatNum,RTK_Status,Antenna_ID\n");
+						}
+
+						if (fGPS)
+						{
+							fprintf(fGPS, "%llu,%llu,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%u,%u,%u,%u\n",
+								rtcm_msg.PVT_msg.msg.Time,
+								rtcm_msg.PVT_msg.msg.GPS_Time,
+								(double)rtcm_msg.PVT_msg.msg.Latitude / 10000000,
+								(double)rtcm_msg.PVT_msg.msg.Longitude / 10000000,
+								(double)rtcm_msg.PVT_msg.msg.Alt_ellipsoid / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Alt_msl / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Speed / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Heading / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Hor_Acc / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Ver_Acc / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Hdg_Acc / 10000,
+								(double)rtcm_msg.PVT_msg.msg.Spd_Acc / 1000,
+								(double)rtcm_msg.PVT_msg.msg.PDOP / 100,
+								rtcm_msg.PVT_msg.msg.FixType,
+								rtcm_msg.PVT_msg.msg.SatNum,
+								rtcm_msg.PVT_msg.msg.RTK_Status,
+								rtcm_msg.PVT_msg.msg.Antenna_ID);
+						}
+					}
+					else if (rtcm_msg.PVT_msg.msg.Antenna_ID == 1)
+					{
+						if (!fGP2)
+						{
+							fGP2 = set_output_file(fname, "-gp2.csv");
+							if (fGP2) fprintf(fGP2, "Time,GPS_Time,Latitude,Longitude,Alt_Ellipsoid,Alt_MSL,Speed,Heading,		\
+												Hor_Acc,Ver_Acc,Hdg_Acc,Spd_Acc,PDOP,FixType,SatNum,RTK_Status,Antenna_ID\n");
+						}
+
+						if (fGP2)
+						{
+							fprintf(fGP2, "%llu,%llu,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%u,%u,%u,%u\n",
+								rtcm_msg.PVT_msg.msg.Time,
+								rtcm_msg.PVT_msg.msg.GPS_Time,
+								(double)rtcm_msg.PVT_msg.msg.Latitude / 10000000,
+								(double)rtcm_msg.PVT_msg.msg.Longitude / 10000000,
+								(double)rtcm_msg.PVT_msg.msg.Alt_ellipsoid / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Alt_msl / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Speed / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Heading / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Hor_Acc / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Ver_Acc / 1000,
+								(double)rtcm_msg.PVT_msg.msg.Hdg_Acc / 10000,
+								(double)rtcm_msg.PVT_msg.msg.Spd_Acc / 1000,
+								(double)rtcm_msg.PVT_msg.msg.PDOP / 100,
+								rtcm_msg.PVT_msg.msg.FixType,
+								rtcm_msg.PVT_msg.msg.SatNum,
+								rtcm_msg.PVT_msg.msg.RTK_Status,
+								rtcm_msg.PVT_msg.msg.Antenna_ID);
+						}
+					}
+
+					break;
+				case (HDR_msg):
+					if (!fHDR)
+					{
+						fHDR = set_output_file(fname, "-hdr.csv");
+						if (fHDR) fprintf(fHDR, "Time,GPS_Time,relPosN,relPosE,relPosD,relPosLength,relPosHeading,relPosHeading_Accuracy\n");
+					}
+
+					if (fHDR)
+					{
+						fprintf(fHDR, "%llu,%llu,%f,%f,%f,%f,%f,%f\n",
+							rtcm_msg.HDR_msg.msg.Time,
+							rtcm_msg.HDR_msg.msg.GPS_Time,
+							(double)rtcm_msg.HDR_msg.msg.relPosN / 1000,
+							(double)rtcm_msg.HDR_msg.msg.relPosE / 1000,
+							(double)rtcm_msg.HDR_msg.msg.resPosD / 1000,
+							(double)rtcm_msg.HDR_msg.msg.relPosLength / 1000,
+							(double)rtcm_msg.HDR_msg.msg.relPosHeading / 10000,
+							(double)rtcm_msg.HDR_msg.msg.relPosHeading_Accuracy / 10000);
+					}
+					break;
+				case (INS_msg):
+					if (!fINS)
+					{
+						fINS = set_output_file(fname, "-ins.csv");
+						if (fINS) fprintf(fINS, "Time,GPS_Time,Latitude,Longitude,Alt_Ellipsoid,Vn,Ve,		\
+												Vd,Roll,Pitch,Heading_Yaw,ZUPT,Status\n");
+					}
+
+					if (fINS)
+					{
+						fprintf(fINS, "%llu,%llu,%f,%f,%f,%f,%f,%f,%f,%f,%f,%u,%u\n",
+							rtcm_msg.INS_msg.msg.Time,
+							rtcm_msg.INS_msg.msg.GPS_Time,
+							(double)rtcm_msg.INS_msg.msg.Latitude / 10000000,
+							(double)rtcm_msg.INS_msg.msg.Longitude / 10000000,
+							(double)rtcm_msg.INS_msg.msg.Alt_ellipsoid / 1000,
+							(double)rtcm_msg.INS_msg.msg.Vn / 1000,
+							(double)rtcm_msg.INS_msg.msg.Ve / 1000,
+							(double)rtcm_msg.INS_msg.msg.Vd / 1000,
+							(double)rtcm_msg.INS_msg.msg.Roll / 10000,
+							(double)rtcm_msg.INS_msg.msg.Pitch / 10000,
+							(double)rtcm_msg.INS_msg.msg.Heading_Yaw / 10000,
+							rtcm_msg.INS_msg.msg.ZUPT,
+							rtcm_msg.INS_msg.msg.Status);
+					}
+					break;
+				case (IM1_msg):
+					if (!fIM1)
+					{
+						fIM1 = set_output_file(fname, "-im1.csv");
+						if (fIM1) fprintf(fIM1, "MCU_Time,Sync_Time,AX,AY,AZ,WX,WY,WZ,OG_WZ,Temp_C\n");
+					}
+
+					if (fIM1)
+					{
+						fprintf(fIM1, "%llu,%llu,%f,%f,%f,%f,%f,%f,%f,%f\n",
+							rtcm_msg.IM1_msg.msg.MCU_Time,
+							rtcm_msg.IM1_msg.msg.Sync_Time,
+							(double)rtcm_msg.IM1_msg.msg.AX / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.AY / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.AZ / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.WX / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.WY / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.WZ / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.OG_WZ / 143165577,
+							(double)rtcm_msg.IM1_msg.msg.Temp_C) / 100;
+					}
+					break;
+
+				// Function returns 0 when the message is invalid
+				default: ;
+					printf("Invalid Message, could not find correct subtype or CRC\r\n");
+			
+
+
+			}
+		}
+	}
+
+	if (fLOG) fclose(fLOG);
+	if (fIMU) fclose(fIMU);
+	if (fGPS) fclose(fGPS);
+	if (fGP2) fclose(fGP2);
+	if (fHDR) fclose(fHDR);
+	if (fINS) fclose(fINS);
+	if (fIM1) fclose(fIM1);
+
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 3)
 	{
 		/* */
 		printf("%s format filename\n", argv[0]);
-		printf("format => a1, oxts\n");
+		//printf("format => a1, oxts\n");
 		//decode_a1_asc_file_ins("D:\\data\\GlencoeSkiCentre\\ins.csv");
 		//decode_a1_asc_file_gps("D:\\data\\GlencoeSkiCentre\\gps.csv");
 		//decode_a1_asc_file_imu("D:\\data\\GlencoeSkiCentre\\imu.csv");
@@ -1395,10 +1799,11 @@ int main(int argc, char** argv)
 		//decode_a1_asc_file_imu("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\imu.csv");
 		//decode_a1_asc_file_ins("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\ins.csv");
 		//read_a1_data("D:\\sgl\\Ottawa.NewFirmware.GroundRecording.2022.08.08\\output_date_2022_8_8_time_14_40_7_SN_202200000104.txt");
-		read_a1_data("C:\\projects\\driveData\\2022\\October_10\\28\\output_date_2022_10_28_time_17_19_7_SN_202100000024.txt");
+		//read_a1_data("C:\\projects\\driveData\\2022\\October_10\\28\\output_date_2022_10_28_time_17_19_7_SN_202100000024.txt");
 		//read_a1_data("C:\\projects\\driveData\\Validation\\drivetests\\garage1\\output_date_2022_10_26_time_15_55_32_SN_202100000024.txt");
 		//read_a1_data("C:\\projects\\driveData\\PNTAX2022\\DAY1\\DAY1\\ShortJam\\day1_shortjam_2.txt");
 		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
+		read_rtcm_data("C:\\Users\\APLabs Six\\Downloads\\test_rtcm_data\\rtcm_log.txt");
 	}
 	else
 	{
@@ -1412,5 +1817,6 @@ int main(int argc, char** argv)
 		}
 		//merge_data_file(argv[1], argv[2]);
 	}
+
 	return 0;
 }
