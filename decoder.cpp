@@ -1644,7 +1644,7 @@ static int read_rtcm_data(const char* fname)
 								(double)rtcm_msg.PVT_msg.msg.Heading / 1000,
 								(double)rtcm_msg.PVT_msg.msg.Hor_Acc / 1000,
 								(double)rtcm_msg.PVT_msg.msg.Ver_Acc / 1000,
-								(double)rtcm_msg.PVT_msg.msg.Hdg_Acc / 10000,
+								(double)rtcm_msg.PVT_msg.msg.Hdg_Acc / 100000,
 								(double)rtcm_msg.PVT_msg.msg.Spd_Acc / 1000,
 								(double)rtcm_msg.PVT_msg.msg.PDOP / 100,
 								rtcm_msg.PVT_msg.msg.FixType,
@@ -1675,7 +1675,7 @@ static int read_rtcm_data(const char* fname)
 								(double)rtcm_msg.PVT_msg.msg.Heading / 1000,
 								(double)rtcm_msg.PVT_msg.msg.Hor_Acc / 1000,
 								(double)rtcm_msg.PVT_msg.msg.Ver_Acc / 1000,
-								(double)rtcm_msg.PVT_msg.msg.Hdg_Acc / 10000,
+								(double)rtcm_msg.PVT_msg.msg.Hdg_Acc / 100000,
 								(double)rtcm_msg.PVT_msg.msg.Spd_Acc / 1000,
 								(double)rtcm_msg.PVT_msg.msg.PDOP / 100,
 								rtcm_msg.PVT_msg.msg.FixType,
@@ -1702,8 +1702,8 @@ static int read_rtcm_data(const char* fname)
 							(double)rtcm_msg.HDR_msg.msg.relPosE / 1000,
 							(double)rtcm_msg.HDR_msg.msg.resPosD / 1000,
 							(double)rtcm_msg.HDR_msg.msg.relPosLength / 1000,
-							(double)rtcm_msg.HDR_msg.msg.relPosHeading / 10000,
-							(double)rtcm_msg.HDR_msg.msg.relPosHeading_Accuracy / 10000);
+							(double)rtcm_msg.HDR_msg.msg.relPosHeading / 100000,
+							(double)rtcm_msg.HDR_msg.msg.relPosHeading_Accuracy / 100000);
 					}
 					break;
 				case (INS_msg):
@@ -1725,9 +1725,9 @@ static int read_rtcm_data(const char* fname)
 							(double)rtcm_msg.INS_msg.msg.Vn / 1000,
 							(double)rtcm_msg.INS_msg.msg.Ve / 1000,
 							(double)rtcm_msg.INS_msg.msg.Vd / 1000,
-							(double)rtcm_msg.INS_msg.msg.Roll / 10000,
-							(double)rtcm_msg.INS_msg.msg.Pitch / 10000,
-							(double)rtcm_msg.INS_msg.msg.Heading_Yaw / 10000,
+							(double)rtcm_msg.INS_msg.msg.Roll / 100000,
+							(double)rtcm_msg.INS_msg.msg.Pitch / 100000,
+							(double)rtcm_msg.INS_msg.msg.Heading_Yaw / 100000,
 							rtcm_msg.INS_msg.msg.ZUPT,
 							rtcm_msg.INS_msg.msg.Status);
 					}
@@ -1803,7 +1803,7 @@ int main(int argc, char** argv)
 		//read_a1_data("C:\\projects\\driveData\\Validation\\drivetests\\garage1\\output_date_2022_10_26_time_15_55_32_SN_202100000024.txt");
 		//read_a1_data("C:\\projects\\driveData\\PNTAX2022\\DAY1\\DAY1\\ShortJam\\day1_shortjam_2.txt");
 		//read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
-		read_rtcm_data("C:\\Users\\APLabs Six\\Downloads\\test_rtcm_data\\rtcm_log.txt");
+		read_rtcm_data("C:\\projects\\Python_Code\\logs\\2023_1\\19\\decoder\\output_date_2023_1_19_time_16_57_10_SN_202100000024.txt");
 	}
 	else
 	{
