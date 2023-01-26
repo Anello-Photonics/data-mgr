@@ -1,4 +1,4 @@
-// test.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// decoder.cpp : This file contains the 'main' function. Program execution begins and ends there.
 
 #include <iostream>
 #include <cmath>
@@ -105,9 +105,10 @@ static int parse_fields_data(char* const buffer, double* data)
 	return n;
 }
 
+// outfilename changed to 257 to suppress warning
 static FILE* set_output_file(const char* fname, const char* key)
 {
-	char filename[255] = { 0 }, outfilename[255] = { 0 };
+	char filename[255] = { 0 }, outfilename[257] = { 0 };
 	strcpy(filename, fname);
 	char* temp = strrchr(filename, '.');
 	if (temp) temp[0] = '\0';
@@ -613,7 +614,10 @@ imu_time_ms,gps_time_ns,ins_solution_status,lat_deg,lon_deg,alt_m,velocity_0_mps
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
-	if (fGGA) fclose(fGGA);
+	if (fGGA) fclose(   fGGA);
+
+    // dwg - non-void function requires return value
+    return EXIT_SUCCESS;
 }
 static int decode_a1_asc_file_gps(const char* fname)
 {
@@ -670,7 +674,9 @@ imu_time_ms,gps_time_ns,lat_deg,lon_deg,alt_ellipsoid_m,alt_msl_m,speed_mps,head
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
 	if (fGGA) fclose(fGGA);
+    return EXIT_SUCCESS;
 }
+
 static int decode_a1_asc_file_imu(const char* fname)
 {
 	FILE* fLOG = fopen(fname, "r"); if (!fLOG) return 0;
@@ -715,6 +721,10 @@ imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
+
+    // dwg - non-void function requires return value
+    return EXIT_SUCCESS;
+
 }
 
 int merge_data_file(const char* imufname, const char *gpsfname)
@@ -824,12 +834,12 @@ static void print(FILE* fp, FILE *fsol, const NComRxC* nrx)
 			" Roll(deg),"
 			" Pitch(deg),"
 			" Heading(deg),"
-			" Acceleration Xv(m/s²),"
-			" Acceleration Yv(m/s²),"
-			" Acceleration Zv(m/s²),"
-			//" Acceleration forward(m/s²),"
-			//" Acceleration lateral(m/s²),"
-			//" Acceleration down(m/s²),"
+			" Acceleration Xv(m/sï¿½),"
+			" Acceleration Yv(m/sï¿½),"
+			" Acceleration Zv(m/sï¿½),"
+			//" Acceleration forward(m/sï¿½),"
+			//" Acceleration lateral(m/sï¿½),"
+			//" Acceleration down(m/sï¿½),"
 			" Angular rate Xv(deg/s),"
 			" Angular rate Yv(deg/s),"
 			" Angular rate Zv(deg/s)"
@@ -923,15 +933,15 @@ static void print(FILE* fp, FILE *fsol, const NComRxC* nrx)
 		if (nrx->mIsHeadingValid) fprintf(fp, "%8.3f", nrx->mHeading);
 		fprintf(fp, ",");
 
-		// Print the 	AccelX (m/s²)
+		// Print the 	AccelX (m/sï¿½)
 		if (nrx->mIsAxValid) fprintf(fp, "%10.3f", nrx->mAx);
 		fprintf(fp, ",");
 
-		// Print the 	AccelY (m/s²)
+		// Print the 	AccelY (m/sï¿½)
 		if (nrx->mIsAyValid) fprintf(fp, "%10.3f", nrx->mAy);
 		fprintf(fp, ",");
 
-		// Print the 	AccelZ (m/s²)
+		// Print the 	AccelZ (m/sï¿½)
 		if (nrx->mIsAzValid) fprintf(fp, "%10.3f", nrx->mAz);
 		fprintf(fp, ",");
 
@@ -947,15 +957,15 @@ static void print(FILE* fp, FILE *fsol, const NComRxC* nrx)
 		if (nrx->mIsWzValid) fprintf(fp, "%10.3f", nrx->mWz);
 		//fprintf(fp, ",");
 
-		// Print the 	AccelForward (m/s²)
+		// Print the 	AccelForward (m/sï¿½)
 		//if (nrx->mIsAfValid) fprintf(fp, "%10.3f", nrx->mAf);
 		//fprintf(fp, ",");
 
-		// Print the 	AccelLateral (m/s²)
+		// Print the 	AccelLateral (m/sï¿½)
 		//if (nrx->mIsAlValid) fprintf(fp, "%10.3f", nrx->mAl);
 		//fprintf(fp, ",");
 
-		// Print the 	AccelDown (m/s²)
+		// Print the 	AccelDown (m/sï¿½)
 		//if (nrx->mIsAdValid) fprintf(fp, "%10.3f", nrx->mAd);
 		//fprintf(fp, ",");
 

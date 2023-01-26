@@ -1,0 +1,109 @@
+Msg_B2A.c:char * Convert_B2A_GPS_core(void *ipMsg, char *gpsId, int msgSize)
+
+
+
+Msg_B2A.c:    memcpy((void*)gpsMsg, (char*)ipMsg + MSG_PLAYLOAD_OFFSET, msgSize);
+
+
+
+Msg_B2A.c:    char chk;// = (unsigned char*)ipMsg + MSG_PLAYLOAD_OFFSET + msgSize;
+
+
+
+Msg_B2A.c:char * Convert_B2A_GPS(void *ipMsg, int msgSize)
+
+
+
+Msg_B2A.c:    return Convert_B2A_GPS_core(ipMsg, "#APGPS", msgSize);
+
+
+
+Msg_B2A.c:char * Convert_B2A_GP2(void *ipMsg, int msgSize)
+
+
+
+Msg_B2A.c:    return Convert_B2A_GPS_core(ipMsg, "#APGP2", msgSize);
+
+
+
+Msg_B2A.c:char * Convert_B2A_IMU(void *ipMsg, int msgSize)
+
+
+
+Msg_B2A.c:    memcpy((void*)imuMsg, (char*)ipMsg + MSG_PLAYLOAD_OFFSET, msgSize);
+
+
+
+Msg_B2A.c:    char chk;// = (unsigned char*)ipMsg + MSG_PLAYLOAD_OFFSET + msgSize;
+
+
+
+Msg_B2A.c:char * Convert_B2A_INS(void *ipMsg, int msgSize)
+
+
+
+Msg_B2A.c:    memcpy((void*)insMsg, (char*)ipMsg + MSG_PLAYLOAD_OFFSET, msgSize);
+
+
+
+Msg_B2A.c:    char chk;// = (unsigned char*)ipMsg + MSG_PLAYLOAD_OFFSET + msgSize;
+
+
+
+Msg_B2A.c:char * Convert_B2A_CAL(void *ipMsg, int msgSize)
+
+
+
+Msg_B2A.c:    memcpy((void*)calMsg, (char*)ipMsg + MSG_PLAYLOAD_OFFSET, msgSize);
+
+
+
+Msg_B2A.c:    char chk;// = (unsigned char*)ipMsg + MSG_PLAYLOAD_OFFSET + msgSize;
+
+
+
+Msg_B2A.c:char * Convert_Message_B2A(void *ipMsg)
+
+
+
+Msg_B2A.c:    Message_header_t *pMsgHeader = (Message_header_t*)ipMsg;
+
+
+
+Msg_B2A.c:    cPtr = (char*)ipMsg;
+
+
+
+Msg_B2A.c:    Calculate_Checksum((char *)ipMsg, MSG_HEADER_SIZE+length, &ck_a, &ck_b);
+
+
+
+Msg_B2A.c:    Calculate_one_byte_Checksum((char *)ipMsg, MSG_HEADER_SIZE+length, &ck_a);
+
+
+
+Msg_B2A.c:    unsigned char *sPtr = (unsigned char*)ipMsg;
+
+
+
+Msg_B2A.c:            return Convert_B2A_GPS(ipMsg, length);
+
+
+
+Msg_B2A.c:            return Convert_B2A_GP2(ipMsg, length);
+
+
+
+Msg_B2A.c:            return Convert_B2A_IMU(ipMsg, length);
+
+
+
+Msg_B2A.c:            return Convert_B2A_INS(ipMsg, length);
+
+
+
+Msg_B2A.c:            return Convert_B2A_CAL(ipMsg, length);
+
+
+
+Msg_B2A.h:char * Convert_Message_B2A(void *ipMsg);

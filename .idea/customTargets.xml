@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="218d348d-704e-4a9f-9d40-b1ad9c61da43" name="decoder" defaultType="TOOL">
+      <configuration id="4f1397ee-c4a5-45c9-8ef6-b2772b2ec75c" name="decoder">
+        <build type="TOOL">
+          <tool actionId="Tool_External Tools_compile" />
+        </build>
+      </configuration>
+    </target>
+  </component>
+</project>

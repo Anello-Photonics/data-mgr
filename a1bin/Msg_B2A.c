@@ -69,7 +69,7 @@ char * Convert_B2A_GPS_core(void *ipMsg, char *gpsId, int msgSize)
         gpsMsg->imu_msecCntr = (uint32_t)gpsMsg->imu_msecCntr + 1;
         gpsMsg->imu_usecCntr = (uint32_t)gpsMsg->imu_usecCntr - 1000;
     }
-    p += sprintf(p, "%I64d.%03d,", ((uint64_t)gpsMsg->imu_secCntr * 1000+gpsMsg->imu_msecCntr),
+    p += sprintf(p, "%I64lu.%03d,", ((uint64_t)gpsMsg->imu_secCntr * 1000+gpsMsg->imu_msecCntr),
                                 (uint32_t)gpsMsg->imu_usecCntr);
     // GPS Time (ITOW)
     uint32_t t_nano_sec     = gpsMsg->t_nano * 1e-9;
@@ -111,6 +111,7 @@ char * Convert_B2A_GPS_core(void *ipMsg, char *gpsId, int msgSize)
     p += sprintf(p, "%.4f,", gpsMsg->headingAccur_deg);
 
     // fix-type (RTK)
+    // warning: ‘sprintf’ may write a terminating nul past the end of the destination
     p += sprintf(p, "%u", gpsMsg->carrSoln);
 
     //Convert MCU system to GPS-synchronized time
@@ -160,7 +161,7 @@ char * Convert_B2A_IMU(void *ipMsg, int msgSize)
     // Construct output message (null-terminated string)
     //                       -----------  MEMS  -----------
     //               ---t---  ax   ay   az   wx   wy   wz
-    p += sprintf(p, "%I64d.%03d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,",
+    p += sprintf(p, "%I64lu.%03d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,",
                         ((uint64_t)imuMsg->secCntr * 1000 + imuMsg->msecCntr), imuMsg->usecCntr,
                         imuMsg->accel_g[X_AXIS],  imuMsg->accel_g[Y_AXIS], imuMsg->accel_g[Z_AXIS],
                         imuMsg->angRate_degPerSec[X_AXIS], imuMsg->angRate_degPerSec[Y_AXIS], imuMsg->angRate_degPerSec[Z_AXIS]);
@@ -196,7 +197,7 @@ char * Convert_B2A_IMU(void *ipMsg, int msgSize)
     uint64_t newTime_sec = (uint64_t)(newTime*1e-9);
     newTime = newTime - ((uint64_t)newTime_sec*1e+9);
     newTime = (newTime+500)/1000/1000;
-    p += sprintf(p, "%I64u.%03u", newTime_sec, (uint32_t)newTime);
+    p += sprintf(p, "%I64lu.%03u", newTime_sec, (uint32_t)newTime);
 
     // Append a separator, checksum, and EOL characters (CR + NL)
     char chk;// = (unsigned char*)ipMsg + MSG_PLAYLOAD_OFFSET + msgSize;
