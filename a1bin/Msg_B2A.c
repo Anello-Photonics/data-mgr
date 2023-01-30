@@ -53,6 +53,8 @@ void Calculate_one_byte_Checksum(char *iBuf, int bytes, char *iCka)
 
 char * Convert_B2A_GPS_core(void *ipMsg, char *gpsId, int msgSize)
 {
+
+
     uint64_t         msgContainer[((sizeof(GPSMessage_t)+MSG_HEADER_SIZE+MSG_CHECKSUM_SIZE+7)/8)*8];
     GPSMessage_t    *gpsMsg = (GPSMessage_t*)&msgContainer[0];
     char            *p = (char *)outputMsgStr;
@@ -69,7 +71,7 @@ char * Convert_B2A_GPS_core(void *ipMsg, char *gpsId, int msgSize)
         gpsMsg->imu_msecCntr = (uint32_t)gpsMsg->imu_msecCntr + 1;
         gpsMsg->imu_usecCntr = (uint32_t)gpsMsg->imu_usecCntr - 1000;
     }
-    p += sprintf(p, "%I64lu.%03d,", ((uint64_t)gpsMsg->imu_secCntr * 1000+gpsMsg->imu_msecCntr),
+    p += sprintf(p, "   %I64lu.%03d,", ((uint64_t)gpsMsg->imu_secCntr * 1000+gpsMsg->imu_msecCntr),
                                 (uint32_t)gpsMsg->imu_usecCntr);
     // GPS Time (ITOW)
     uint32_t t_nano_sec     = gpsMsg->t_nano * 1e-9;

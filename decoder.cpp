@@ -1,4 +1,4 @@
-// decoder.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// test.cpp : This file contains the 'main' function. Program execution begins and ends there.
 
 #include <iostream>
 #include <cmath>
@@ -64,12 +64,7 @@ typedef struct
 #define MAXFIELD 100
 
 
-
-/*****************************************
- * returns true if the checksum is correct
- * @param buf
- * @return true - if checksum is correct
- */
+//returns true if the checksum is correct
 static int verify_checksum(char* buf) {
 	char* q, * msg_ck, sum;
 	char ck[10] = { '\0' };
@@ -85,13 +80,6 @@ static int verify_checksum(char* buf) {
 	return (msg_ck[0] == ck[0] && msg_ck[1] == ck[1]) ? 1 : 0;
 }
 
-
-/******************************************************
- * Parse Fields
- * @param buffer
- * @param val
- * @return
- */
 static int parse_fields(char* const buffer, char** val)
 {
 	char* p, *q;
@@ -108,13 +96,6 @@ static int parse_fields(char* const buffer, char** val)
 	return n;
 }
 
-
-/*************************************************************
- * Parse Fields Data
- * @param buffer
- * @param data
- * @return
- */
 static int parse_fields_data(char* const buffer, double* data)
 {
 	char* val[MAXFIELD];
@@ -124,14 +105,6 @@ static int parse_fields_data(char* const buffer, double* data)
 	return n;
 }
 
-
-/***************************************************************
- * Set Output File
- * @param fname
- * @param key
- * @return Returns a file descriptor
- */
-// dwg - outfilename size changed to 257 to suppress warning
 static FILE* set_output_file(const char* fname, const char* key)
 {
 	char filename[255] = { 0 }, outfilename[257] = { 0 };
@@ -142,26 +115,12 @@ static FILE* set_output_file(const char* fname, const char* key)
 	return fopen(outfilename, "w");
 }
 
-
-/*****************************************
- * Print Log
- * @param val
- * @param num
- */
 static void print_log(char** val, int num)
 {
 	for (int i = 0; i < num; ++i)
-		printf("%s%c", val[i], (i + 1) ==
-                         num ? '\n' : (i + 2) ==
-                         num ? '*' : ',');
+		printf("%s%c", val[i], (i + 1) == num ? '\n' : (i + 2) == num ? '*' : ',');
 }
 
-
-/**************************************************************
- * Degrees to Degrees Minutes and Seconds
- * @param deg
- * @param dms
- */
 static void deg2dms(double deg, double* dms)
 {
 	double sign = deg < 0.0 ? (-1.0) : (1.0), a = fabs(deg);
@@ -169,23 +128,7 @@ static void deg2dms(double deg, double* dms)
 	dms[1] = floor(a); a = (a - dms[1]) * 60.0;
 	dms[2] = a; dms[0] *= sign;
 }
-
-
-/******************************************
- * Output an nmea gga sentence
- * @param buff
- * @param time
- * @param type
- * @param blh
- * @param ns
- * @param dop
- * @param age
- * @return Returns the size of the output string not including the zero byte
- */
-extern int outnmea_gga(unsigned char* buff,
-                       float time, int type,
-                       double* blh, int ns,
-                       float dop, float age)
+extern int outnmea_gga(unsigned char* buff, float time, int type, double* blh, int ns, float dop, float age)
 {
 	double h, ep[6], dms1[3], dms2[3];
 	char* p = (char*)buff, * q, sum;
@@ -207,40 +150,15 @@ extern int outnmea_gga(unsigned char* buff,
 	h = 0.0;
 	deg2dms(fabs(blh[0]) * 180 / PI, dms1);
 	deg2dms(fabs(blh[1]) * 180 / PI, dms2);
-	p += sprintf(p,
-                 "$GPGGA,"
-                 "%02.0f%02.0f%05.2f,"
-                 "%02.0f%010.7f,"
-                 "%s,"
-                 "%03.0f%010.7f,"
-                 "%s,"
-                 "%d,"
-                 "%02d,"
-                 "%.1f,"
-                 "%.3f,"
-                 "M,"
-                 "%.3f,"
-                 "M,"
-                 "%.1f,",
-		        ep[3], ep[4], ep[5], dms1[0],
-                dms1[1] + dms1[2] / 60.0, blh[0] >= 0 ? "N" : "S",
-		        dms2[0], dms2[1] + dms2[2] / 60.0, blh[1] >= 0 ? "E" : "W",
-                type, ns, dop, blh[2] - h, h, age);
-
-    // dwg  this next line of code makes me nervous ;-(
-	for (q = (char*)buff + 1, sum = 0; *q; q++) {
-
-        sum ^= *q; /* check-sum */
-    }
+	p += sprintf(p, "$GPGGA,%02.0f%02.0f%05.2f,%02.0f%010.7f,%s,%03.0f%010.7f,%s,%d,%02d,%.1f,%.3f,M,%.3f,M,%.1f,",
+		ep[3], ep[4], ep[5], dms1[0], dms1[1] + dms1[2] / 60.0, blh[0] >= 0 ? "N" : "S",
+		dms2[0], dms2[1] + dms2[2] / 60.0, blh[1] >= 0 ? "E" : "W", type,
+		ns, dop, blh[2] - h, h, age);
+	for (q = (char*)buff + 1, sum = 0; *q; q++) sum ^= *q; /* check-sum */
 	p += sprintf(p, "*%02X%c%c", sum, 0x0D, 0x0A);
 	return (int)(p - (char*)buff);
 }
 
-/*
- * Since this program is standalone and only includes it's own files,
- * it's odd that it doesn't know whether MAX_BUF_LEN has been defined
- * elsewhere.
- */
 #ifndef MAX_BUF_LEN
 #define MAX_BUF_LEN 4096
 #endif
@@ -254,9 +172,7 @@ typedef struct
 static int add_buff(nmea_buff_t* buff, uint8_t data)
 {
 	int ret = 0;
-	if (buff->nbyte >= MAX_BUF_LEN) {
-        buff->nbyte = 0;
-    }
+	if (buff->nbyte >= MAX_BUF_LEN) buff->nbyte = 0;
 	if (buff->nbyte == 0)
 	{
 		memset(buff, 0, sizeof(nmea_buff_t));
@@ -284,13 +200,6 @@ static int add_buff(nmea_buff_t* buff, uint8_t data)
 	return ret;
 }
 
-
-/***************************************************************
- * Find the time offset using #APGPS
- * @param imufname
- * @param time_offset
- * @return returns either a 0 or a 1
- */
 /* find the time offset using the #APGPS */
 int found_time_offset(const char* imufname, double *time_offset)
 {
@@ -303,12 +212,8 @@ int found_time_offset(const char* imufname, double *time_offset)
 	nmea_buff_t buff = { 0 };
 	while (fIMU != NULL && !feof(fIMU))
 	{
-		if ((data = fgetc(fIMU)) == EOF) {
-            break;
-        }
-		if (!add_buff(&buff, data)) {
-            continue;
-        }
+		if ((data = fgetc(fIMU)) == EOF) break;
+		if (!add_buff(&buff, data)) continue;
 
 		if (strstr((char*)buff.dat, "#APGPS") != NULL)
 		{
@@ -708,9 +613,7 @@ imu_time_ms,gps_time_ns,ins_solution_status,lat_deg,lon_deg,alt_m,velocity_0_mps
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
-	if (fGGA) fclose(   fGGA);
-
-    // dwg - non-void function requires return value
+	if (fGGA) fclose(fGGA);
     return EXIT_SUCCESS;
 }
 static int decode_a1_asc_file_gps(const char* fname)
@@ -768,9 +671,8 @@ imu_time_ms,gps_time_ns,lat_deg,lon_deg,alt_ellipsoid_m,alt_msl_m,speed_mps,head
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
 	if (fGGA) fclose(fGGA);
-    return EXIT_SUCCESS;
+    return  EXIT_SUCCESS;
 }
-
 static int decode_a1_asc_file_imu(const char* fname)
 {
 	FILE* fLOG = fopen(fname, "r"); if (!fLOG) return 0;
@@ -815,10 +717,7 @@ imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_
 	}
 	if (fLOG) fclose(fLOG);
 	if (fCSV) fclose(fCSV);
-
-    // dwg - non-void function requires return value
     return EXIT_SUCCESS;
-
 }
 
 int merge_data_file(const char* imufname, const char *gpsfname)
