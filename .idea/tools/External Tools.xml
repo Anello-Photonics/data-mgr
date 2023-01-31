@@ -1,0 +1,16 @@
+<toolSet name="External Tools">
+  <tool name="linker" description="use clang as the linker" showInMainMenu="false" showInEditor="false" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="clang" />
+      <option name="PARAMETERS" value="-o decoder" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+  </tool>
+  <tool name="compile" description="use clang to compile" showInMainMenu="false" showInEditor="false" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="clang" />
+      <option name="PARAMETERS" value="-c decoder.cpp" />
+      <option name="WORKING_DIRECTORY" value="$USER_HOME$/CLionProjects/decoder/" />
+    </exec>
+  </tool>
+</toolSet>

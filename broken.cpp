@@ -1,5 +1,4 @@
 // decoder.cpp : This file contains the 'main' function. Program execution begins and ends there.
-// decoder.cpp 2023/01/30 douglas goodall (dwg), compiles on clang w/o warnings, portable to linux
 
 #include <iostream>
 #include <cmath>
@@ -62,9 +61,14 @@ typedef struct {
 } pvt_imu_dat_t;
 
 #define MAXFIELD 100
+#define MAX_BUF_LEN 4096
 
 
-//returns true if the checksum is correct
+/*****************************************
+ * returns true if the checksum is correct
+ * @param buf
+ * @return true - if checksum is correct
+ */
 static int verify_checksum(char *buf) {
     char *q, *msg_ck, sum;
     char ck[10] = {'\0'};
@@ -80,6 +84,13 @@ static int verify_checksum(char *buf) {
     return (msg_ck[0] == ck[0] && msg_ck[1] == ck[1]) ? 1 : 0;
 }
 
+
+/******************************************************
+ * Parse Fields
+ * @param buffer
+ * @param val
+ * @return
+ */
 static int parse_fields(char *const buffer, char **val) {
     char *p, *q;
     int n = 0;
@@ -95,6 +106,13 @@ static int parse_fields(char *const buffer, char **val) {
     return n;
 }
 
+
+/*************************************************************
+ * Parse Fields Data
+ * @param buffer
+ * @param data
+ * @return
+ */
 static int parse_fields_data(char *const buffer, double *data) {
     char *val[MAXFIELD];
     int n = parse_fields(buffer, val);
@@ -103,6 +121,14 @@ static int parse_fields_data(char *const buffer, double *data) {
     return n;
 }
 
+
+/***************************************************************
+ * Set Output File
+ * @param fname
+ * @param key
+ * @return Returns a file descriptor
+ */
+// dwg - outfilename size changed to 257 to suppress warning
 static FILE *set_output_file(const char *fname, const char *key) {
     char filename[255] = {0}, outfilename[257] = {0};
     strcpy(filename, fname);
@@ -112,11 +138,25 @@ static FILE *set_output_file(const char *fname, const char *key) {
     return fopen(outfilename, "w");
 }
 
+
+/*****************************************
+ * Print Log
+ * @param val
+ * @param num
+ */
 static void print_log(char **val, int num) {
     for (int i = 0; i < num; ++i)
-        printf("%s%c", val[i], (i + 1) == num ? '\n' : (i + 2) == num ? '*' : ',');
+        printf("%s%c", val[i], (i + 1) ==
+                               num ? '\n' : (i + 2) ==
+                                            num ? '*' : ',');
 }
 
+
+/**************************************************************
+ * Degrees to Degrees Minutes and Seconds
+ * @param deg
+ * @param dms
+ */
 static void deg2dms(double deg, double *dms) {
     double sign = deg < 0.0 ? (-1.0) : (1.0), a = fabs(deg);
     dms[0] = floor(a);
@@ -127,7 +167,22 @@ static void deg2dms(double deg, double *dms) {
     dms[0] *= sign;
 }
 
-extern int outnmea_gga(unsigned char *buff, float time, int type, double *blh, int ns, float dop, float age) {
+
+/******************************************
+ * Output an nmea gga sentence
+ * @param buff
+ * @param time
+ * @param type
+ * @param blh
+ * @param ns
+ * @param dop
+ * @param age
+ * @return Returns the size of the output string not including the zero byte
+ */
+extern int outnmea_gga(unsigned char *buff,
+                       float time, int type,
+                       double *blh, int ns,
+                       float dop, float age) {
     double h, ep[6], dms1[3], dms2[3];
     char *p = (char *) buff, *q, sum;
 
@@ -148,18 +203,35 @@ extern int outnmea_gga(unsigned char *buff, float time, int type, double *blh, i
     h = 0.0;
     deg2dms(fabs(blh[0]) * 180 / PI, dms1);
     deg2dms(fabs(blh[1]) * 180 / PI, dms2);
-    p += sprintf(p, "$GPGGA,%02.0f%02.0f%05.2f,%02.0f%010.7f,%s,%03.0f%010.7f,%s,%d,%02d,%.1f,%.3f,M,%.3f,M,%.1f,",
-                 ep[3], ep[4], ep[5], dms1[0], dms1[1] + dms1[2] / 60.0, blh[0] >= 0 ? "N" : "S",
-                 dms2[0], dms2[1] + dms2[2] / 60.0, blh[1] >= 0 ? "E" : "W", type,
-                 ns, dop, blh[2] - h, h, age);
-    for (q = (char *) buff + 1, sum = 0; *q; q++) sum ^= *q; /* check-sum */
+    p += sprintf(p,
+                 "$GPGGA,"
+                 "%02.0f%02.0f%05.2f,"
+                 "%02.0f%010.7f,"
+                 "%s,"
+                 "%03.0f%010.7f,"
+                 "%s,"
+                 "%d,"
+                 "%02d,"
+                 "%.1f,"
+                 "%.3f,"
+                 "M,"
+                 "%.3f,"
+                 "M,"
+                 "%.1f,",
+                 ep[3], ep[4], ep[5], dms1[0],
+                 dms1[1] + dms1[2] / 60.0, blh[0] >= 0 ? "N" : "S",
+                 dms2[0], dms2[1] + dms2[2] / 60.0, blh[1] >= 0 ? "E" : "W",
+                 type, ns, dop, blh[2] - h, h, age);
+
+    // dwg  this next line of code makes me nervous ;-(
+    for (q = (char *) buff + 1, sum = 0; *q; q++) {
+
+        sum ^= *q; /* check-sum */
+    }
     p += sprintf(p, "*%02X%c%c", sum, 0x0D, 0x0A);
     return (int) (p - (char *) buff);
 }
 
-#ifndef MAX_BUF_LEN
-#define MAX_BUF_LEN 4096
-#endif
 
 typedef struct {
     uint8_t dat[MAX_BUF_LEN];
@@ -168,7 +240,9 @@ typedef struct {
 
 static int add_buff(nmea_buff_t *buff, uint8_t data) {
     int ret = 0;
-    if (buff->nbyte >= MAX_BUF_LEN) buff->nbyte = 0;
+    if (buff->nbyte >= MAX_BUF_LEN) {
+        buff->nbyte = 0;
+    }
     if (buff->nbyte == 0) {
         memset(buff, 0, sizeof(nmea_buff_t));
         if (data == '#') {
@@ -187,6 +261,13 @@ static int add_buff(nmea_buff_t *buff, uint8_t data) {
     return ret;
 }
 
+
+/***************************************************************
+ * Find the time offset using #APGPS
+ * @param imufname
+ * @param time_offset
+ * @return returns either a 0 or a 1
+ */
 /* find the time offset using the #APGPS */
 int found_time_offset(const char *imufname, double *time_offset) {
     std::vector<double> timeoffset;
@@ -198,12 +279,19 @@ int found_time_offset(const char *imufname, double *time_offset) {
     uint8_t data = 0;
     nmea_buff_t buff = {0};
     while (fIMU != NULL && !feof(fIMU)) {
-        if ((data = fgetc(fIMU)) == EOF) break;
-        if (!add_buff(&buff, data)) continue;
+        if ((data = fgetc(fIMU)) == EOF) {
+            break;
+        }
+        if (!add_buff(&buff, data)) {
+            continue;
+        }
 
         if (strstr((char *) buff.dat, "#APGPS") != NULL) {
             double gpsdata[20] = {0};
             int num = parse_fields((char *) buff.dat, val);
+
+            // TODO: document magic number 16
+            // TODO: describe the condition being tested
             if (num > 16) {
                 /* real-time GPS solution */
                 gpsdata[0] = atof(val[1]);  /* IMU time */
@@ -222,6 +310,9 @@ int found_time_offset(const char *imufname, double *time_offset) {
                 gpsdata[13] = atof(val[14]); /* speed accur */
                 gpsdata[14] = atof(val[15]); /* heading accur */
                 gpsdata[15] = atof(val[16]); /* rtk fix status */
+
+                // TODO: document magic number 0
+                // TODO: describe the condition being tested
                 if (gpsdata[12] > 0) {
                     double cur_time_offset = gpsdata[1] * 1.0e-9 - gpsdata[0] * 1.0e-3;
                     timeoffset.push_back(cur_time_offset);
@@ -279,6 +370,8 @@ Col7:  HPL value in meters, or NA if not available
 Col8:  VPL value in meters, or NA if not available
 Col9:  NbrSV
 */
+
+
 typedef struct {
     double time;
     double lat;
@@ -307,47 +400,80 @@ typedef struct {
     double acc_v;
 } pvt_t;
 
-int read_sept_pvt(const char *pvtfname, std::vector<pvt_t> &pvts) {
+/**
+ *
+ * @param pvtfname
+ * @param pvts
+ * @return
+ */
+int read_sept_pvt(
+        const char *pvtfname,
+        std::vector<pvt_t> &pvts) {
     FILE *fGPS = fopen(pvtfname, "r");
-    if (!fGPS) return 0;
+    if (!fGPS) {
+        return 0;
+    }
+
     char buffer[512] = {0};
+
     pvt_t pvt = {0};
+
     FILE *fOUT = set_output_file(pvtfname, "-pvt.csv");
+
     FILE *fGGA = NULL;
+
     int index = 0;
+
     double pre_time = 0;
+
     while (fGPS != NULL && !feof(fGPS)) {
-        if (fgets(buffer, sizeof(buffer), fGPS) == NULL) break;
+        if (fgets(buffer, sizeof(buffer), fGPS) == NULL) {
+            break;
+        }
+
         /*
--1 1330754218.90  0.59020675017  -1.86143267962     1484.99971      -24.38316   -0.00214   -0.00280   -0.00028  8.31954443e-05 -4.815372e-09  32   6 440   0 -20000000000.000
+-1 1330754218.90  0.59020675017  -1.86143267962     1484.99971      -24.38316   -0.00214   -0.00280   -0.00028
+         8.31954443e-05 -4.815372e-09  32   6 440   0 -20000000000.000
 -3  1330754218.90          0.790          0.400          0.480          0.630          6.059          7.668  32
--1 1330754219.00  0.59020675022  -1.86143267961     1484.99962      -24.38316   -0.00011   -0.00136    0.00023  8.31949744e-05 -4.838394e-09  32   6 450   0 -20000000000.000
+-1 1330754219.00  0.59020675022  -1.86143267961     1484.99962      -24.38316   -0.00011   -0.00136    0.00023
+         8.31949744e-05 -4.838394e-09  32   6 450   0 -20000000000.000
 -3  1330754219.00          0.790          0.400          0.480          0.630          6.004          7.671  32
         */
+
         int id = 0;
         int num = sscanf(buffer, "%i", &id);
-        if (num < 1) continue;
+
+        if (num < 1) {
+            continue;
+        }
+
         if (id == -1) {
-            num = sscanf(buffer, "%i %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %i %i %i %i %lf", &id, &pvt.time, &pvt.lat,
-                         &pvt.lon, &pvt.ht, &pvt.geod, &pvt.vn, &pvt.ve, &pvt.vu, &pvt.cdt, &pvt.cdt_drift, &pvt.nsat,
-                         &pvt.type, &pvt.age, &pvt.err, &pvt.cog);
+            num = sscanf(buffer, "%i %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %i %i %i %i %lf",
+                         &id, &pvt.time, &pvt.lat, &pvt.lon, &pvt.ht, &pvt.geod, &pvt.vn, &pvt.ve, &pvt.vu,
+                         &pvt.cdt, &pvt.cdt_drift, &pvt.nsat, &pvt.type, &pvt.age, &pvt.err, &pvt.cog);
+
+            // TODO: what is the point of this
+            // document the meaning of id == -1
+            // so id id == -1 and we got 17 vars from the scan, then what?
             if (id == -1 && num == 17) {
             }
+
         } else if (id == -3) {
             double time = 0;
             int nsat1 = 0;
-            num = sscanf(buffer, "%i %lf %lf %lf %lf %lf %lf %lf %i", &id, &time, &pvt.pdop, &pvt.tdop, &pvt.hdop,
-                         &pvt.vdop, &pvt.hpl, &pvt.vpl, &nsat1);
+            num = sscanf(buffer, "%i %lf %lf %lf %lf %lf %lf %lf %i", &id, &time, &pvt.pdop,
+                         &pvt.tdop, &pvt.hdop, &pvt.vdop, &pvt.hpl, &pvt.vpl, &nsat1);
             if (id == -3 && num == 9) {
                 if (fabs(time - pvt.time) < 0.01) {
                     pvts.push_back(pvt);
                     int wk = floor(pvt.time / (7 * 24 * 3600.0));
                     double ws = pvt.time - wk * (7 * 24 * 3600.0);
                     if (fOUT) {
-                        fprintf(fOUT,
-                                "%4i,%10.4f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%i,%i,%i\n",
-                                wk, ws, pvt.lat, pvt.lon, pvt.ht, pvt.geod, pvt.vn, pvt.ve, pvt.vu, pvt.pdop, pvt.hdop,
-                                pvt.vdop, pvt.hpl, pvt.vpl, pvt.cog, pvt.err, pvt.nsat, pvt.type);
+                        fprintf(fOUT, "%4i,%10.4f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,"
+                                      "%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%i,%i,%i\n",
+                                wk, ws, pvt.lat, pvt.lon, pvt.ht, pvt.geod, pvt.vn, pvt.ve, pvt.vu,
+                                pvt.pdop, pvt.hdop, pvt.vdop, pvt.hpl, pvt.vpl, pvt.cog, pvt.err,
+                                pvt.nsat, pvt.type);
                     }
                     if ((pvt.time - pre_time) > 30.0) {
                         if (fGGA) fclose(fGGA);
@@ -360,7 +486,8 @@ int read_sept_pvt(const char *pvtfname, std::vector<pvt_t> &pvts) {
                     if (fGGA) {
                         char gga_buffer[255] = {0};
                         double blh[3] = {pvt.lat, pvt.lon, pvt.ht};
-                        outnmea_gga((unsigned char *) gga_buffer, ws, 1, blh, pvt.nsat, pvt.pdop, 0);
+                        outnmea_gga((unsigned char *) gga_buffer,
+                                    ws, 1, blh, pvt.nsat, pvt.pdop, 0);
                         fprintf(fGGA, "%s", gga_buffer);
                     }
                 }
@@ -372,6 +499,7 @@ int read_sept_pvt(const char *pvtfname, std::vector<pvt_t> &pvts) {
     if (fGGA) fclose(fGGA);
     return pvts.size() > 0;
 }
+
 
 #if 0
 int read_ubx_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
@@ -447,9 +575,26 @@ int read_ubx_pvt(const char* pvtfname, std::vector< pvt_t>& pvts)
 #endif
 
 
-int
-Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lon, double ht, double geod, double speed,
-                           double heading, double pdop, int nsat, unsigned char *buf) {
+/**
+ * Output Generate Message GPS
+ * @param timeIMU
+ * @param timeGPS
+ * @param lat
+ * @param lon
+ * @param ht
+ * @param geod
+ * @param speed
+ * @param heading
+ * @param pdop
+ * @param nsat
+ * @param buf
+ * @return
+ */
+int Output_GenerateMessage_GPS(
+        double timeIMU, double timeGPS, double lat, double lon,
+        double ht, double geod, double speed, double heading,
+        double pdop, int nsat, unsigned char *buf) {
+
     // Construct the output message, APGPS
     char *p = (char *) buf;
     p += sprintf(p, "#APGPS,");
@@ -502,12 +647,13 @@ Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lo
     // Extra bits for my sim
     p += sprintf(p, "%.4f,", 0.05);
     double heading_acc = 100.0;
-    if (speed > 20.0)
+    if (speed > 20.0) {
         heading_acc = 0.15;
-    else if (speed > 10.0)
+    } else if (speed > 10.0) {
         heading_acc = 0.5;
-    else if (speed > 5.0)
+    } else if (speed > 5.0) {
         heading_acc = 5.0;
+    }
     p += sprintf(p, "%.4f,", heading_acc);
 
     // fix-type (RTK)
@@ -538,21 +684,42 @@ Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lo
     return (countOut);
 }
 
+/***************************************************
+ * Decode A1 Ascii File Ins
+ * @param fname
+ * @return Always returns EXIT_SUCCESS (0)
+ */
 static int decode_a1_asc_file_ins(const char *fname) {
     FILE *fLOG = fopen(fname, "r");
-    if (!fLOG) return 0;
+    if (!fLOG) {
+        return 0;
+    }
+
     char buffer[512] = {0};
     FILE *fGGA = NULL;
     FILE *fCSV = NULL;
     unsigned long index = 0;
     char *val[MAXFIELD];
+
     while (fLOG != NULL && !feof(fLOG)) {
-        if (fgets(buffer, sizeof(buffer), fLOG) == NULL) break;
-        if (strlen(buffer) < 1) continue;
+        if (fgets(buffer, sizeof(buffer), fLOG) == NULL) {
+            break;
+        }
+
+        if (strlen(buffer) < 1) {
+            continue;
+        }
+
         ++index;
-        if (index < 2) continue;
+        if (index < 2) {
+            continue;
+        }
+
         int num = parse_fields(buffer, val);
-        if (num < 13) continue;
+        if (num < 13) {
+            continue;
+        }
+
         double ws = atof(val[1]) * 1.0e-9;
         int wk = floor(ws) / (7 * 24 * 3600);
         ws -= wk * 7 * 24 * 3600;
@@ -570,48 +737,90 @@ static int decode_a1_asc_file_ins(const char *fname) {
         att[1] = atof(val[10]);
         att[2] = atof(val[11]);
         int flag = atoi(val[12]);
+
         /*
-imu_time_ms,gps_time_ns,ins_solution_status,lat_deg,lon_deg,alt_m,velocity_0_mps,velocity_1_mps,velocity_2_mps,attitude_0_deg,attitude_1_deg,attitude_2_deg,zupt_flag,position_geojson
-428440,1335259598642443520,1,56.6810955,-5.1093139,61.4550018311,,,,-0.049008,1.032018,0.832515,1,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]}, ""properties"": {""radius"": 1, ""fillColor"": [255, 0, 0]}}"
-428450,1335259598652437504,1,56.6810955,-5.1093139,61.4550018311,,,,-0.04765,1.035131,0.832629,1,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]}, ""properties"": {""radius"": 1, ""fillColor"": [255, 0, 0]}}"
+imu_time_ms,gps_time_ns,ins_solution_status,lat_deg,lon_deg,alt_m,velocity_0_mps,velocity_1_mps,velocity_2_mps,
+         attitude_0_deg,attitude_1_deg,attitude_2_deg,zupt_flag,position_geojson
+428440,1335259598642443520,1,56.6810955,-5.1093139,61.4550018311,,,,-0.049008,1.032018,0.832515,1,
+         "{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]},
+         ""properties"": {""radius"": 1, ""fillColor"": [255, 0, 0]}}"
+428450,1335259598652437504,1,56.6810955,-5.1093139,61.4550018311,,,,-0.04765,1.035131,0.832629,1,
+         "{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]},
+         ""properties"": {""radius"": 1, ""fillColor"": [255, 0, 0]}}"
         */
-        if (!fGGA) fGGA = set_output_file(fname, "-ins.nmea");
-        if (!fCSV) fCSV = set_output_file(fname, "-ins.csv");
+
+        if (!fGGA) {
+            fGGA = set_output_file(fname, "-ins.nmea");
+        }
+        if (!fCSV) {
+            fCSV = set_output_file(fname, "-ins.csv");
+        }
         if (fGGA) {
             char gga_buffer[255] = {0};
             outnmea_gga((unsigned char *) gga_buffer, ws, 1, blh, 10, 1.0, 0);
             fprintf(fGGA, "%s", gga_buffer);
         }
         if (fCSV) {
-            fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%i,%i\n", ws,
-                    blh[0] * R2D, blh[1] * R2D, blh[2], vel[0], vel[1], vel[2], att[0], att[1], att[2], status, flag);
+            fprintf(fCSV,
+                    "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%i,%i\n",
+                    ws, blh[0] * R2D, blh[1] * R2D, blh[2], vel[0], vel[1], vel[2], att[0],
+                    att[1], att[2], status, flag);
         }
     }
-    if (fLOG) fclose(fLOG);
-    if (fCSV) fclose(fCSV);
-    if (fGGA) fclose(fGGA);
+    if (fLOG) {
+        fclose(fLOG);
+    }
+    if (fCSV) {
+        fclose(fCSV);
+    }
+    if (fGGA) {
+        fclose(fGGA);
+    }
+
+    // dwg - non-void function requires return value
     return EXIT_SUCCESS;
 }
 
+/******************************************
+ * Decode A1 Ascii File GPS
+ * @param fname
+ * @return Always returns EXIT_SUCCESS
+ */
 static int decode_a1_asc_file_gps(const char *fname) {
     FILE *fLOG = fopen(fname, "r");
-    if (!fLOG) return 0;
+    if (!fLOG) {
+        return 0;
+    }
+
     char buffer[512] = {0};
+
     FILE *fGGA = NULL;
     FILE *fCSV = NULL;
+
     unsigned long index = 0;
     char *val[MAXFIELD];
     while (fLOG != NULL && !feof(fLOG)) {
-        if (fgets(buffer, sizeof(buffer), fLOG) == NULL) break;
-        if (strlen(buffer) < 1) continue;
+        if (fgets(buffer, sizeof(buffer), fLOG) == NULL) {
+            break;
+        }
+        if (strlen(buffer) < 1) {
+            continue;
+        }
         ++index;
-        if (index < 2) continue;
+        if (index < 2) {
+            continue;
+        }
         int num = parse_fields(buffer, val);
-        if (num < 14) continue;
+        if (num < 14) {
+            continue;
+        }
         double ws = atof(val[1]) * 1.0e-9;
         int wk = floor(ws) / (7 * 24 * 3600);
         ws -= wk * 7 * 24 * 3600;
         double pvt[20] = {0};
+
+        // 2023/01/27 dwg
+#ifdef NEVER
         pvt[0] = atof(val[2]) * D2R; /* lat */
         pvt[1] = atof(val[3]) * D2R; /* lon */
         pvt[2] = atof(val[4]); /* ht */
@@ -625,47 +834,95 @@ static int decode_a1_asc_file_gps(const char *fname) {
         pvt[10] = atof(val[12]);
         pvt[11] = atof(val[13]);
         pvt[12] = atof(val[14]);
+#else
+        for (int ii = 0; ii < 13; ii++) {
+            pvt[ii] = atof(val[ii + 2]);
+        }
+#endif
+
         /*
-imu_time_ms,gps_time_ns,lat_deg,lon_deg,alt_ellipsoid_m,alt_msl_m,speed_mps,heading_deg,accuracy_horizontal_m,accuracy_vertical_m,PDOP,gnss_fix_type,num_sats,speed_accuracy_mps,heading_accuracy_deg,carrier_solution_status,position_geojson
-428557.383,1335259598749614848,56.6810955,-5.1093139,61.453,9.855,0.002,0,0.23,0.352,1.05,3,30,0.086,180,0,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]}, ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
-428797.368,1335259598999614720,56.6810955,-5.109314,61.452,9.853,0.001,0,0.23,0.351,1.05,3,30,0.083,180,0,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.109314, 56.6810955]}, ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
-429297.369,1335259599499613952,56.6810955,-5.109314,61.453,9.855,0.008,0,0.23,0.351,1.05,3,30,0.088,180,0,"{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.109314, 56.6810955]}, ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
-        */
-        if (!fGGA) fGGA = set_output_file(fname, "-gps.nmea");
-        if (!fCSV) fCSV = set_output_file(fname, "-gps.csv");
+imu_time_ms,gps_time_ns,lat_deg,lon_deg,alt_ellipsoid_m,alt_msl_m,speed_mps,heading_deg,accuracy_horizontal_m,
+         accuracy_vertical_m,PDOP,gnss_fix_type,num_sats,speed_accuracy_mps,heading_accuracy_deg,
+         carrier_solution_status,position_geojson
+428557.383,1335259598749614848,56.6810955,-5.1093139,61.453,9.855,0.002,0,0.23,0.352,1.05,3,30,0.086,180,0,
+         "{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.1093139, 56.6810955]},
+         ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
+428797.368,1335259598999614720,56.6810955,-5.109314,61.452,9.853,0.001,0,0.23,0.351,1.05,3,30,0.083,180,0,
+         "{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.109314, 56.6810955]},
+
+         ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
+429297.369,1335259599499613952,56.6810955,-5.109314,61.453,9.855,0.008,0,0.23,0.351,1.05,3,30,0.088,180,0,
+         "{""type"": ""Feature"", ""geometry"": {""type"": ""Point"", ""coordinates"": [-5.109314, 56.6810955]},
+         ""properties"": {""radius"": 3, ""fillColor"": [255, 0, 0]}}"
+		*/
+
+        if (!fGGA) {
+            fGGA = set_output_file(fname, "-gps.nmea");
+        }
+        if (!fCSV) {
+            fCSV = set_output_file(fname, "-gps.csv");
+        }
         if (fGGA) {
             char gga_buffer[255] = {0};
             outnmea_gga((unsigned char *) gga_buffer, ws, 1, pvt, 10, 1.0, 0);
             fprintf(fGGA, "%s", gga_buffer);
         }
         if (fCSV) {
-            fprintf(fCSV,
-                    "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
-                    ws, pvt[0] * R2D, pvt[1] * R2D, pvt[2], pvt[3], pvt[4], pvt[5], pvt[6], pvt[7], pvt[8], pvt[9],
-                    pvt[10], pvt[11], pvt[12]);
+            fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,"
+                          "%10.4f,%10.4f,%10.4f,%10.4f\n", ws, pvt[0] * R2D, pvt[1] * R2D, pvt[2], pvt[3], pvt[4],
+                    pvt[5], pvt[6], pvt[7], pvt[8], pvt[9], pvt[10], pvt[11], pvt[12]);
         }
     }
-    if (fLOG) fclose(fLOG);
-    if (fCSV) fclose(fCSV);
-    if (fGGA) fclose(fGGA);
+    if (fLOG) {
+        fclose(fLOG);
+    }
+    if (fCSV) {
+        fclose(fCSV);
+    }
+    if (fGGA) {
+        fclose(fGGA);
+    }
     return EXIT_SUCCESS;
 }
 
+
+/**************************************************
+ * Decode A1 Ascii File IMU
+ * @param fname
+ * @return
+ */
 static int decode_a1_asc_file_imu(const char *fname) {
     FILE *fLOG = fopen(fname, "r");
-    if (!fLOG) return 0;
+    if (!fLOG) {
+        return 0;
+    }
+
     char buffer[512] = {0};
     FILE *fCSV = NULL;
     unsigned long index = 0;
     char *val[MAXFIELD];
-    while (fLOG != NULL && !feof(fLOG)) {
-        if (fgets(buffer, sizeof(buffer), fLOG) == NULL) break;
-        if (strlen(buffer) < 1) continue;
+    while (fLOG != NULL &&
+           !feof(fLOG)) {
+        if (fgets(buffer, sizeof(buffer), fLOG) == NULL) {
+            break;
+        }
+
+        if (strlen(buffer) < 1) {
+            continue;
+        }
+
         ++index;
-        if (index < 2) continue;
+        if (index < 2) {
+            continue;
+        }
         int num = parse_fields(buffer, val);
-        if (num < 11) continue;
+        if (num < 11) {
+            continue;
+        }
         double imu[20] = {0};
+
+        // 2023/01/27 dwg
+#ifdef NEVER
         imu[0] = atof(val[0]) * 1.0e-3;
         imu[1] = atof(val[1]); /* fx */
         imu[2] = atof(val[2]); /* fy */
@@ -677,8 +934,15 @@ static int decode_a1_asc_file_imu(const char *fname) {
         imu[8] = atof(val[8]); /* odr */
         imu[9] = atof(val[9]); /* odr time */
         imu[10] = atof(val[10]); /* temp */
+#else
+        for (int ii = 0; ii < 11; ii++) {
+            imu[ii] = atof(val[ii]);
+        }
+#endif
         /*
-imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_dps,fog_angrate_dps,odometer_speed_mps,odometer_time_ms,temperature_c
+
+imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_dps,
+         fog_angrate_dps,odometer_speed_mps,odometer_time_ms,temperature_c
 428439.173,0.0154,-0.0013,-1.0078,-0.0753,-0.0451,0.0415,-0.0031,0,0,22.5898
 428449.208,0.0189,0.0001,-1.0089,0.1864,0.1983,-0.031,0.00279,0,0,22.5898
 428459.202,0.0179,-0.001,-1.0001,0.1433,-0.0165,-0.0129,0.00476,0,0,22.625
@@ -686,17 +950,34 @@ imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_
 428479.191,0.0205,-0.0031,-0.9954,0.0304,-0.0353,-0.091,0.02633,0,0,22.625
 428489.185,0.0185,-0.0026,-1.0076,-0.0917,-0.0185,-0.1251,-0.01484,0,0,22.625
         */
-        if (!fCSV) fCSV = set_output_file(fname, "-imu.csv");
+        if (!fCSV) {
+            fCSV = set_output_file(fname, "-imu.csv");
+        }
         if (fCSV) {
-            fprintf(fCSV, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", imu[0],
-                    imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
+            fprintf(fCSV,
+                    "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
+                    imu[0], imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
         }
     }
-    if (fLOG) fclose(fLOG);
-    if (fCSV) fclose(fCSV);
+    if (fLOG) {
+        fclose(fLOG);
+    }
+    if (fCSV) {
+        fclose(fCSV);
+    }
+
+    // dwg - non-void function requires return value
     return EXIT_SUCCESS;
+
 }
 
+
+/*******************************************************
+ * Merge DatsAa File
+ * @param imufname
+ * @param gpsfname
+ * @return Returns 1 for success and 0 for failure
+ */
 int merge_data_file(const char *imufname, const char *gpsfname) {
     FILE *fIMU = NULL;
     FILE *fOUT = NULL;
@@ -704,9 +985,16 @@ int merge_data_file(const char *imufname, const char *gpsfname) {
     printf("%s\n%s\n", imufname, gpsfname);
 
     double time_offset = 1330752542.6489844;
+
     std::vector<pvt_t> pvts;
-    if (!found_time_offset(imufname, &time_offset)) return 0;
-    if (!read_sept_pvt(gpsfname, pvts)) return 0;
+
+    if (!found_time_offset(imufname, &time_offset)) {
+        return 0;
+    }
+
+    if (!read_sept_pvt(gpsfname, pvts)) {
+        return 0;
+    }
 
     char buffer[1024] = {0};
     fIMU = fopen(imufname, "rb");
@@ -723,9 +1011,14 @@ int merge_data_file(const char *imufname, const char *gpsfname) {
     uint8_t data = 0;
     nmea_buff_t buff = {0};
     std::vector<pvt_t>::iterator pvt = pvts.begin();
+
     while (fIMU != NULL && !feof(fIMU)) {
-        if ((data = fgetc(fIMU)) == EOF) break;
-        if (!add_buff(&buff, data)) continue;
+        if ((data = fgetc(fIMU)) == EOF) {
+            break;
+        }
+        if (!add_buff(&buff, data)) {
+            continue;
+        }
 
         if (strstr((char *) buff.dat, "#APIMU") != NULL) {
             memset(buffer, 0, sizeof(buffer));
@@ -737,26 +1030,36 @@ int merge_data_file(const char *imufname, const char *gpsfname) {
                 double timeIMU_GPS = pvt->time - time_offset;
                 if (timeIMU_GPS <= timeIMU) {
                     double heading = atan2(pvt->ve, pvt->vn) * 180 / PI;
-                    if (heading < 0)
+                    if (heading < 0) {
                         heading += 360.0;
+                    }
                     double speed = sqrt(pvt->vn * pvt->vn + pvt->ve * pvt->ve);
                     char gga_buff[255] = {0};
-                    Output_GenerateMessage_GPS(timeIMU_GPS, pvt->time, pvt->lat, pvt->lon, pvt->ht, pvt->geod, speed,
-                                               heading, pvt->pdop, pvt->nsat, (unsigned char *) gga_buff);
-                    if (fOUT) fprintf(fOUT, "%s", gga_buff);
+                    Output_GenerateMessage_GPS(timeIMU_GPS, pvt->time, pvt->lat, pvt->lon, pvt->ht,
+                                               pvt->geod, speed, heading, pvt->pdop, pvt->nsat,
+                                               (unsigned char *) gga_buff);
+                    if (fOUT) {
+                        fprintf(fOUT, "%s", gga_buff);
+                    }
                     ++pvt;
                 } else {
                     break;
                 }
             }
-            if (fOUT) fprintf(fOUT, "%s", buff.dat);
+            if (fOUT) {
+                fprintf(fOUT, "%s", buff.dat);
+            }
         }
 
         buff.nbyte = 0;
     }
 
-    if (fIMU) fclose(fIMU);
-    if (fOUT) fclose(fOUT);
+    if (fIMU) {
+        fclose(fIMU);
+    }
+    if (fOUT) {
+        fclose(fOUT);
+    }
 
     return 1;
 }
@@ -858,113 +1161,178 @@ static void print(FILE *fp, FILE *fsol, const NComRxC *nrx) {
         fprintf(fsol, "%s", gga_buffer);
 
         // Print the 	PosLat (deg)
-        if (nrx->mIsLatValid) fprintf(fp, "%14.9f", nrx->mLat);
+        if (nrx->mIsLatValid) {
+            fprintf(fp, "%14.9f", nrx->mLat);
+        }
         fprintf(fp, ",");
 
         // Print the 	PosLon (deg)
-        if (nrx->mIsLonValid) fprintf(fp, "%14.9f", nrx->mLon);
+        if (nrx->mIsLonValid) {
+            fprintf(fp, "%14.9f", nrx->mLon);
+        }
         fprintf(fp, ",");
 
         // Print the 	PosAlt (m)
-        if (nrx->mIsAltValid) fprintf(fp, "%10.3f", nrx->mAlt);
+        if (nrx->mIsAltValid) {
+            fprintf(fp, "%10.3f", nrx->mAlt);
+        }
         fprintf(fp, ",");
 
         // Print the 	VelNorth (km/h)
-        if (nrx->mIsVnValid) fprintf(fp, "%10.3f", nrx->mVn);
+        if (nrx->mIsVnValid) {
+            fprintf(fp, "%10.3f", nrx->mVn);
+        }
         fprintf(fp, ",");
 
         // Print the 	VelEast (km/h)
-        if (nrx->mIsVeValid) fprintf(fp, "%10.3f", nrx->mVe);
+        if (nrx->mIsVeValid) {
+            fprintf(fp, "%10.3f", nrx->mVe);
+        }
         fprintf(fp, ",");
 
         // Print the 	VelDown (km/h)
-        if (nrx->mIsVdValid) fprintf(fp, "%10.3f", nrx->mVd);
+        if (nrx->mIsVdValid) {
+            fprintf(fp, "%10.3f", nrx->mVd);
+        }
         fprintf(fp, ",");
 
         // Print the 	AngleRoll (deg)
-        if (nrx->mIsRollValid) fprintf(fp, "%8.3f", nrx->mRoll);
+        if (nrx->mIsRollValid) {
+            fprintf(fp, "%8.3f", nrx->mRoll);
+        }
         fprintf(fp, ",");
 
-        // Print the 	AnglePitch (deg)
-        if (nrx->mIsPitchValid) fprintf(fp, "%8.3f", nrx->mPitch);
+        // Pzint the 	AnglePitch (deg)
+        if (nrx->mIsPitchValid) {
+            fprintf(fp, "%8.3f", nrx->mPitch);
+        }
         fprintf(fp, ",");
 
         // Print the 	AngleHeading (deg)
-        if (nrx->mIsHeadingValid) fprintf(fp, "%8.3f", nrx->mHeading);
+        if (nrx->mIsHeadingValid) {
+            fprintf(fp, "%8.3f", nrx->mHeading);
+        }
         fprintf(fp, ",");
 
         // Print the 	AccelX (m/s�)
-        if (nrx->mIsAxValid) fprintf(fp, "%10.3f", nrx->mAx);
+        if (nrx->mIsAxValid) {
+            fprintf(fp, "%10.3f", nrx->mAx);
+        }
         fprintf(fp, ",");
 
         // Print the 	AccelY (m/s�)
-        if (nrx->mIsAyValid) fprintf(fp, "%10.3f", nrx->mAy);
+        if (nrx->mIsAyValid) {
+            fprintf(fp, "%10.3f", nrx->mAy);
+        }
         fprintf(fp, ",");
 
         // Print the 	AccelZ (m/s�)
-        if (nrx->mIsAzValid) fprintf(fp, "%10.3f", nrx->mAz);
+        if (nrx->mIsAzValid) {
+            fprintf(fp, "%10.3f", nrx->mAz);
+        }
         fprintf(fp, ",");
 
-        // Print the 	AngleRateX (deg/s)
-        if (nrx->mIsWxValid) fprintf(fp, "%10.3f", nrx->mWx);
+        // Pzrint the 	AngleRateX (deg/s)
+        if (nrx->mIsWxValid) {
+            fprintf(fp, "%10.3f", nrx->mWx);
+        }
         fprintf(fp, ",");
 
         // Print the 	AngleRateY (deg/s)
-        if (nrx->mIsWyValid) fprintf(fp, "%10.3f", nrx->mWy);
+        if (nrx->mIsWyValid) {
+            fprintf(fp, "%10.3f", nrx->mWy);
+        }
         fprintf(fp, ",");
 
         // Print the 	AngleRateZ (deg/s)
-        if (nrx->mIsWzValid) fprintf(fp, "%10.3f", nrx->mWz);
+        if (nrx->mIsWzValid) {
+            fprintf(fp, "%10.3f", nrx->mWz);
+        }
         //fprintf(fp, ",");
 
         // Print the 	AccelForward (m/s�)
-        //if (nrx->mIsAfValid) fprintf(fp, "%10.3f", nrx->mAf);
+        //if (nrx->mIsAfValid) {
+        //    fprintf(fp, "%10.3f", nrx->mAf);
+        //}
         //fprintf(fp, ",");
 
-        // Print the 	AccelLateral (m/s�)
-        //if (nrx->mIsAlValid) fprintf(fp, "%10.3f", nrx->mAl);
+        // Print the 	AccelLazeral (m/s�)
+        //if (nrx->mIsAlValid) {
+        //    fprintf(fp, "%10.3f", nrx->mAl);
+        //}
         //fprintf(fp, ",");
 
         // Print the 	AccelDown (m/s�)
-        //if (nrx->mIsAdValid) fprintf(fp, "%10.3f", nrx->mAd);
+        //if (nrx->mIsAdValid) {
+        //    fprintf(fp, "%10.3f", nrx->mAd);
+        //}
         //fprintf(fp, ",");
 
-        // Print the 	AngleRateForward (deg/s)
-        //if (nrx->mIsWfValid) fprintf(fp, "%10.3f", nrx->mWf);
+        // Print the 	AngleRazeForward (deg/s)
+        //if (nrx->mIsWfValid) {
+        //    fprintf(fp, "%10.3f", nrx->mWf);
+        //}
         //fprintf(fp, ",");
 
         // Print the 	AngleRateLateral (deg/s)
-        //if (nrx->mIsWlValid) fprintf(fp, "%10.3f", nrx->mWl);
+        //if (nrx->mIsWlValid) {
+        //    fprintf(fp, "%10.3f", nrx->mWl);
+        //}
         //fprintf(fp, ",");
 
         // Print the 	AngleRateDown (deg/s)
-        //if (nrx->mIsWdValid) fprintf(fp, "%10.3f", nrx->mWd);
+        //if (nrx->mIsWdValid) {
+        //    fprintf(fp, "%10.3f", nrx->mWd);
+        //}
 
         fprintf(fp, "\n");
     }
 }
 
-/* read oxts ncom file, and generate csv file and nmea gga file */
+/**
+ * 2023/01/27 dwg
+ * Possible return code values for read_oxts_data
+ */
+enum {
+    OXTS_DATA_READ_COMPLETE,
+    OXTS_DATA_NOT_AVAILABLE
+};
+
+/**************************************************************
+ * read oxts ncom file, and generate csv file and nmea gga file
+ * @param fname
+ * @return Always returns 0 even if log fails to open
+ */
 static int read_oxts_data(const char *fname) {
     FILE *fLOG = fopen(fname, "rb");
-    if (!fLOG) return 0;
+    if (!fLOG) {
+        return OXTS_DATA_NOT_AVAILABLE;
+    }
+
     FILE *fCSV = NULL;
     FILE *fGGA = NULL;
+
+    // see https://github.com/OxfordTechnicalSolutions/NCOMdecoder/blob/master/nav/NComRxC.c
 
     int c = 0;                // char from input file
     NComRxC *nrx = NComCreateNComRxC();
 
-    while (nrx != NULL && fLOG != NULL && !feof(fLOG) && (c = fgetc(fLOG)) != EOF) {
+    while (nrx != NULL &&
+           fLOG != NULL &&
+           !feof(fLOG) &&
+           (c = fgetc(fLOG)) != EOF) {
         // Decode the data
         if (NComNewChar(nrx, (unsigned char) c) == COM_NEW_UPDATE) {
             // For regular updates then output to main output file, otherwise,
             // for falling edge input triggers then output to trigger file.
             switch (nrx->mOutputPacketType) {
                 case OUTPUT_PACKET_REGULAR: {
-
-                    if (!fCSV) fCSV = set_output_file(fname, "-rts.csv");
-                    if (!fGGA) fGGA = set_output_file(fname, "-rts.nmea");
-
+                    if (!fCSV) {
+                        fCSV = set_output_file(fname, "-rts.csv");
+                    }
+                    if (!fGGA) {
+                        fGGA = set_output_file(fname, "-rts.nmea");
+                    }
                     print(fCSV, fGGA, nrx);
                     break;
                 }
@@ -982,18 +1350,21 @@ static int read_oxts_data(const char *fname) {
     report(nrx);
     printf("\n");
 
-    if (fLOG) fclose(fLOG);
-    if (fCSV) fclose(fCSV);
-    if (fGGA) fclose(fGGA);
+    if (fLOG) {
+        fclose(fLOG);
+    }
+    if (fCSV) {
+        fclose(fCSV);
+    }
+    if (fGGA) {
+        fclose(fGGA);
+    }
 
     NComDestroyNComRxC(nrx);
 
-    return 0;
+    return OXTS_DATA_READ_COMPLETE;  // 0
 }
 
-#ifndef MAX_BUF_LEN
-#define MAX_BUF_LEN (1200)
-#endif
 
 typedef struct {
     uint8_t buf[MAX_BUF_LEN];
@@ -1005,10 +1376,17 @@ typedef struct {
 
 static int input_a1_data(a1buff_t *a1, uint8_t data) {
     int ret = 0;
-    if (a1->nbyte >= MAX_BUF_LEN) a1->nbyte = 0;
+    if (a1->nbyte >= MAX_BUF_LEN) {
+        a1->nbyte = 0;
+    }
+
     /* #AP */
-    if (a1->nbyte == 1 && !((data == 'A' && a1->buf[0] == '#') || (data == 'G' && a1->buf[0] == '$'))) a1->nbyte = 0;
-    //if (a1->nbyte == 2 && data != 'P') a1->nbyte = 0;
+    if (a1->nbyte == 1 &&
+        !((data == 'A' && a1->buf[0] == '#') ||
+          (data == 'G' && a1->buf[0] == '$'))) {
+        a1->nbyte = 0;
+    }
+
     if (a1->nbyte == 0) {
         if (data == '#' || data == '$') {
             memset(a1, 0, sizeof(a1buff_t));
@@ -1019,7 +1397,8 @@ static int input_a1_data(a1buff_t *a1, uint8_t data) {
         if (data == ',') {
             a1->loc[a1->nseg++] = a1->nbyte;
             if (a1->nseg == 2) {
-                if (strstr((char *) a1->buf, "APANT") != NULL || strstr((char *) a1->buf, "APRTK") != NULL) {
+                if (strstr((char *) a1->buf, "APANT") != NULL ||
+                    strstr((char *) a1->buf, "APRTK") != NULL) {
                     uint8_t *temp = a1->buf + (a1->loc[0]) + 1;
                     a1->nlen = atof((char *) temp);
                 } else {
@@ -1040,12 +1419,13 @@ static int input_a1_data(a1buff_t *a1, uint8_t data) {
         } else {
             /* check message end for binary message ,binary msg\r\n */
             if (a1->nbyte >= (a1->nlen + a1->loc[1] + 3)) {
-                if (a1->buf[6] == '1') /* APANT1 */
+                if (a1->buf[6] == '1') {/* APANT1 */
                     ret = 2;
-                else if (a1->buf[6] == '2') /* APANT2 */
+                } else if (a1->buf[6] == '2') { /* APANT2 */
                     ret = 3;
-                else /* APRTK */
+                } else { /* APRTK */
                     ret = 4;
+                }
             }
         }
     }
@@ -1055,7 +1435,11 @@ static int input_a1_data(a1buff_t *a1, uint8_t data) {
 /* read A1 file*/
 static int read_a1_data(const char *fname) {
     FILE *fLOG = fopen(fname, "rb");
-    if (!fLOG) return 0;
+
+    if (!fLOG) {
+        return 0;
+    }
+
     int data = 0;
     FILE *fCSV = NULL;
     FILE *fGGA = NULL;
@@ -1072,7 +1456,9 @@ static int read_a1_data(const char *fname) {
     char *val[MAXFIELD];
     a1buff_t a1buff = {0};
 
-    while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF) {
+    while (fLOG != NULL &&
+           !feof(fLOG) &&
+           (data = fgetc(fLOG)) != EOF) {
         int ret = input_a1_data(&a1buff, data);
         if (ret) {
             if (strstr((char *) a1buff.buf, "*") == NULL) {
@@ -1102,21 +1488,27 @@ static int read_a1_data(const char *fname) {
                 num = parse_fields((char *) a1buff.buf, val);
             } else if (ret == 2) /* APANT1 */
             {
-                if (!fANT1) fANT1 = set_output_file(fname, "-ant1.log");
+                if (!fANT1) {
+                    fANT1 = set_output_file(fname, "-ant1.log");
+                }
                 if (fANT1) {
                     fwrite(a1buff.buf + a1buff.loc[1] + 1, sizeof(char), a1buff.nlen, fANT1);
                 }
                 isOK = 1;
             } else if (ret == 3) /* APANT2 */
             {
-                if (!fANT2) fANT2 = set_output_file(fname, "-ant2.log");
+                if (!fANT2) {
+                    fANT2 = set_output_file(fname, "-ant2.log");
+                }
                 if (fANT2) {
                     fwrite(a1buff.buf + a1buff.loc[1] + 1, sizeof(char), a1buff.nlen, fANT2);
                 }
                 isOK = 1;
             } else if (ret == 4) /* APRTK */
             {
-                if (!fBASE) fBASE = set_output_file(fname, "-base.log");
+                if (!fBASE) {
+                    fBASE = set_output_file(fname, "-base.log");
+                }
                 if (fBASE) {
                     fwrite(a1buff.buf + a1buff.loc[1] + 1, sizeof(char), a1buff.nlen, fBASE);
                 }
@@ -1124,19 +1516,22 @@ static int read_a1_data(const char *fname) {
             }
 
             if (!isOK && num == 18 && strstr(val[0], "APGPS") != NULL) {
-                /* time [s], lat [deg], lon [deg], ht [m], speed [m/s], heading [deg], hor. accuracy [m], ver. accuracy [m], PDOP, fixType, sat num, gps second [s], pps [s] */
+                /* time [s], lat [deg], lon [deg], ht [m], speed [m/s], heading [deg], hor. accuracy [m],
+                 * ver. accuracy [m], PDOP, fixType, sat num, gps second [s], pps [s] */
                 /*
-#APGPS,318213.135,1343773580500184320,37.3988755,-121.9791327,-27.9650,1.9240,0.0110,0.0000,0.2380,0.3820,0.9700,3,29,0.0820,180.0000,0*65
+#APGPS,318213.135,1343773580500184320,37.3988755,-121.9791327,-27.9650,1.9240,0.0110,0.0000,0.2380,0.3820,
+                 0.9700,3,29,0.0820,180.0000,0*65
                 */
                 double gps[20] = {0};
-                gps[0] = atof(val[1]); /* time MCU */
-                gps[1] = atof(val[2]) * 1.0e-6; /* GPS ms */
 
+// 2023/01/27 dwg -
+#ifdef NEVER
+                gps[0] = atof(val[1]); /* time MCU */
+                gps[1] = atof(val[2])*1.0e-6; /* GPS ms */
                 gps[2] = atof(val[3]); /* lat */
                 gps[3] = atof(val[4]); /* lon */
                 gps[4] = atof(val[5]); /* ht */
                 gps[5] = atof(val[6]); /* msl */
-
                 gps[6] = atof(val[7]); /* speed */
                 gps[7] = atof(val[8]); /* heading */
                 gps[8] = atof(val[9]); /* acc_h */
@@ -1147,36 +1542,51 @@ static int read_a1_data(const char *fname) {
                 gps[13] = atof(val[14]); /* acc speed */
                 gps[14] = atof(val[15]); /* acc heading */
                 gps[15] = atof(val[16]); /* rtk fix status */
+#else
+                for (int ii = 0; ii < 16; ii++) {
+                    gps[ii] = atof(val[ii + 1]);
+                }
+#endif // NEVERS
+
                 if (!fGPS_CSV) {
                     fGPS_CSV = set_output_file(fname, "-gps.csv");
-                    if (fGPS_CSV)
+                    if (fGPS_CSV) {
                         fprintf(fGPS_CSV,
-                                "Time_MCU_ms,GPS_time_ms,lat,lon,alt_ellipsoidal,speed,heading,acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,acc_heading,rtk_fix\n");
+                                "Time_MCU_ms,GPS_time_ms,lat,lon,alt_ellipsoidal,speed,heading,"
+                                "acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,acc_heading,rtk_fix\n");
+                    }
                 }
                 if (fGPS_CSV) {
-                    fprintf(fGPS_CSV,
-                            "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
-                            gps[0], gps[1], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11],
-                            gps[12], gps[13], gps[14], gps[15]);
+                    fprintf(fGPS_CSV, "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,"
+                                      "%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
+                            gps[0], gps[1], gps[2], gps[3], gps[4], gps[6], gps[7],
+                            gps[8], gps[9], gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
+
                 }
-                if (!fGPS_GGA) fGPS_GGA = set_output_file(fname, "-gps.nmea");
+                if (!fGPS_GGA) {
+                    fGPS_GGA = set_output_file(fname, "-gps.nmea");
+                }
                 if (fGPS_GGA) {
                     char gga_buffer[255] = {0};
                     double blh[3] = {gps[2] * D2R, gps[3] * D2R, gps[4]};
-                    outnmea_gga((unsigned char *) gga_buffer, gps[0], 1, blh, gps[12], gps[10], 0);
+                    outnmea_gga((unsigned char *) gga_buffer, gps[0], 1, blh, gps[12],
+                                gps[10], 0);
                     fprintf(fGPS_GGA, "%s", gga_buffer);
                 }
                 isOK = 1;
             }
             if (!isOK && num >= 17 && strstr(val[0], "APGP2") != NULL) {
                 /*
-#APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,1.1400,3,26,0.0600,180.0000,0*07
+#APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,
+                 1.1400,3,26,0.0600,180.0000,0*07
                 */
 
                 double gps[20] = {0};
-                gps[0] = atof(val[1]); /* time MCU */
-                gps[1] = atof(val[2]) * 1.0e-6; /* GPS ms */
 
+                // 2023/01/27 dwg -
+#ifdef NEVER
+                gps[0] = atof(val[1]); /* time MCU */
+                gps[1] = atof(val[2])*1.0e-6; /* GPS ms */
                 gps[2] = atof(val[3]); /* lat */
                 gps[3] = atof(val[4]); /* lon */
                 gps[4] = atof(val[5]); /* ht */
@@ -1191,23 +1601,36 @@ static int read_a1_data(const char *fname) {
                 gps[13] = atof(val[14]); /* acc speed */
                 gps[14] = atof(val[15]); /* acc heading */
                 gps[15] = atof(val[16]); /* rtk fix status */
+#else
+                for (int ii = 0; ii < 16; ii++) {
+                    gps[ii] = atof(val[ii + 1]);
+                }
+#endif // NEVER
+
                 if (!fGP2_CSV) {
                     fGP2_CSV = set_output_file(fname, "-gp2.csv");
-                    if (fGP2_CSV)
-                        fprintf(fGP2_CSV,
-                                "Time_MCU_ns,GPS_time_ms,lat,lon,alt_ellipsoidal,speed,heading,acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,acc_heading,rtk_fix\n");
+                    if (fGP2_CSV) {
+                        fprintf(fGP2_CSV, "Time_MCU_ns,GPS_time_ms,lat,lon,alt_ellipsoidal,"
+                                          "speed,heading,acc_h,acc_v,pdop,fixtype,sat_num,acc_speed,"
+                                          "acc_heading,rtk_fix\n");
+                    }
                 }
                 if (fGP2_CSV) {
-                    fprintf(fGP2_CSV,
-                            "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
-                            gps[0], gps[1], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9], gps[10], gps[11],
-                            gps[12], gps[13], gps[14], gps[15]);
+                    fprintf(fGP2_CSV, "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,"
+                                      "%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
+                            gps[0], gps[1], gps[2], gps[3], gps[4], gps[6], gps[7], gps[8], gps[9],
+                            gps[10], gps[11], gps[12], gps[13], gps[14], gps[15]);
                 }
-                if (!fGP2_GGA) fGP2_GGA = set_output_file(fname, "-gp2.nmea");
+
+                if (!fGP2_GGA) {
+                    fGP2_GGA = set_output_file(fname, "-gp2.nmea");
+                }
+
                 if (fGP2_GGA) {
                     char gga_buffer[255] = {0};
                     double blh[3] = {gps[2] * D2R, gps[3] * D2R, gps[4]};
-                    outnmea_gga((unsigned char *) gga_buffer, gps[0], 1, blh, gps[12], gps[10], 0);
+                    outnmea_gga((unsigned char *) gga_buffer,
+                                gps[0], 1, blh, gps[12], gps[10], 0);
                     fprintf(fGP2_GGA, "%s", gga_buffer);
                 }
                 isOK = 1;
@@ -1217,6 +1640,9 @@ static int read_a1_data(const char *fname) {
                 #APIMU,318214.937,0.0344,-0.0128,1.0077,-0.0817,0.0013,-0.0038,0.01051,0.0000,318214.548,47.0547*55
                 */
                 double imu[20] = {0};
+
+                // 2023/01/27 DWG -
+#ifdef NEVER
                 imu[0] = atof(val[1]); /* imu time ms*/
                 imu[1] = atof(val[2]); /* fx */
                 imu[2] = atof(val[3]); /* fy */
@@ -1228,51 +1654,73 @@ static int read_a1_data(const char *fname) {
                 imu[8] = atof(val[9]); /* odr */
                 imu[9] = atof(val[10]) * 1.0e-3; /* odr time */
                 imu[10] = atof(val[11]); /* temp */
+#else
+                for (int ii = 0; ii < 11; ii++) {
+                    imu[ii] = atof(val[ii + 1]);
+                }
+#endif // NEVER
+
                 if (!fIMU) {
                     fIMU = set_output_file(fname, "-imu.csv");
-                    if (fIMU) fprintf(fIMU, "imu_time_ms,fx,fy,fz,wx,wy,wz,wz_fog,odr,odr_time,temp\n");
                 }
                 if (fIMU) {
-                    fprintf(fIMU, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
-                            imu[0], imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
+                    fprintf(fIMU, "imu_time_ms,fx,fy,fz,wx,wy,wz,wz_fog,odr,odr_time,temp\n");
                 }
-                isOK = 1;
             }
-            if (!isOK && num >= 14 && strstr(val[0], "APINS") != NULL) {
-                /* time[s], lat[radian], lon[radian], ht[m], vn[m / s], ve[m / s], vd[m / s], roll[deg], pitch[deg], yaw[deg] */
-                /*
-                #APINS,318215,1343773580502990592,1,37.398875500000,-121.979132700000,-27.965002059937,,,,-0.166232,1.773182,0.250746,1*74
-                */
-                double ins[20] = {0};
-                ins[0] = atof(val[1]);            //IMUtime (ms)
-                ins[1] = atof(val[2]) * 1.0e-6;    //GPStime (ms)
-                ins[2] = atof(val[3]);            //INS solution
+            if (fIMU) {
+                fprintf(fIMU, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
+                        imu[0], imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
+            }
+            isOK = 1;
+        }
+        if (!isOK && num >= 14 && strstr(val[0], "APINS") != NULL) {
+            /* time[s], lat[radian], lon[radian], ht[m], vn[m / s], ve[m / s], vd[m / s], roll[deg], pitch[deg], yaw[deg] */
+            /*
+            #APINS,318215,1343773580502990592,1,37.398875500000,-121.979132700000,-27.965002059937,,,,-0.166232,1.773182,0.250746,1*74
+            */
+            double ins[20] = {0};
 
-                ins[3] = atof(val[4]);            //lat
-                ins[4] = atof(val[5]);            //lon
-                ins[5] = atof(val[6]);            //alt
+            // 2023/01/27 dwg
+#ifdef NEVER
+            ins[0] = atof(val[1]);			//IMUtime (ms)
+            ins[1] = atof(val[2]) * 1.0e-6;	//GPStime (ms)
+            ins[2] = atof(val[3]);			//INS solution
 
-                ins[6] = atof(val[7]);            //vn
-                ins[7] = atof(val[8]);            //ve
-                ins[8] = atof(val[9]);            //vd
+            ins[3] = atof(val[4]);			//lat
+            ins[4] = atof(val[5]);			//lon
+            ins[5] = atof(val[6]);			//alt
 
-                ins[9] = atof(val[10]);            //roll
-                ins[10] = atof(val[11]);        //pitch
-                ins[11] = atof(val[12]);        //heading
+            ins[6] = atof(val[7]);			//vn
+            ins[7] = atof(val[8]);			//ve
+            ins[8] = atof(val[9]);			//vd
 
-                ins[12] = atof(val[13]);        //ZUPT
-                if (!fCSV) {
-                    fCSV = set_output_file(fname, "-rts.csv");
-                    if (fCSV)
-                        fprintf(fCSV, "imu_time_ms,GPS_time_ms,lat,lon,alt,vn,ve,vd,roll,pitch,heading,INS_solution\n");
-                }
+            ins[9] = atof(val[10]);			//roll
+            ins[10] = atof(val[11]);		//pitch
+            ins[11] = atof(val[12]);		//heading
+
+            ins[12] = atof(val[13]);		//ZUPT
+#else
+            for (int ii = 0; ii < 13; ii++) {
+                ins[ii] = atof(val[ii + 1]);
+            }
+#endif // NEVER
+
+            if (!fCSV) {
+                fCSV = set_output_file(fname, "-rts.csv");
                 if (fCSV) {
                     fprintf(fCSV,
-                            "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
-                            ins[0], ins[1], ins[3], ins[4], ins[5], ins[6], ins[7], ins[8], ins[9], ins[10], ins[11],
-                            ins[2]);
+                            "imu_time_ms,GPS_time_ms,lat,lon,"
+                            "alt,vn,ve,vd,roll,pitch,heading,INS_solution\n");
                 }
-                if (!fGGA) fGGA = set_output_file(fname, "-rts.nmea");
+                if (fCSV) {
+                    fprintf(fCSV, "%10.3f,%14.9f,%14.9f,%14.9f,%10.4f,"
+                                  "%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n",
+                            ins[0], ins[1], ins[3], ins[4], ins[5], ins[6],
+                            ins[7], ins[8], ins[9], ins[10], ins[11], ins[2]);
+                }
+                if (!fGGA) {
+                    fGGA = set_output_file(fname, "-rts.nmea");
+                }
                 if (fGGA) {
                     char gga_buffer[255] = {0};
                     double blh[3] = {ins[3] * D2R, ins[4] * D2R, ins[5]};
@@ -1287,19 +1735,44 @@ static int read_a1_data(const char *fname) {
             a1buff.nbyte = 0;
         }
     }
-    if (fLOG) fclose(fLOG);
-    if (fCSV) fclose(fCSV);
-    if (fGGA) fclose(fGGA);
-    if (fIMU) fclose(fIMU);
-    if (fGPS_CSV) fclose(fGPS_CSV);
-    if (fGP2_CSV) fclose(fGP2_CSV);
-    if (fGPS_GGA) fclose(fGPS_GGA);
-    if (fGP2_GGA) fclose(fGP2_GGA);
-    if (fANT1) fclose(fANT1);
-    if (fANT2) fclose(fANT2);
-    if (fBASE) fclose(fBASE);
-    if (fLOG_GGA) fclose(fLOG_GGA);
-    return 0;
+    if (fLOG) {
+        fclose(fLOG);
+    }
+    if (fCSV) {
+        fclose(fCSV);
+    }
+    if (fGGA) {
+        fclose(fGGA);
+    }
+    if (fIMU) {
+        fclose(fIMU);
+    }
+    if (fGPS_CSV) {
+        fclose(fGPS_CSV);
+    }
+    if (fGP2_CSV) {
+        fclose(fGP2_CSV);
+    }
+    if (fGPS_GGA) {
+        fclose(fGPS_GGA);
+    }
+    if (fGP2_GGA) {
+        fclose(fGP2_GGA);
+    }
+    if (fANT1) {
+        fclose(fANT1);
+    }
+    if (fANT2) {
+        fclose(fANT2);
+    }
+    if (fBASE) {
+        fclose(fBASE);
+    }
+    if (fLOG_GGA) {
+        fclose(fLOG_GGA);
+    }
+
+    return EXIT_SUCCESS;
 }
 
 double lat2local(double lat, double *lat2north) {
@@ -1350,3 +1823,4 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
+
