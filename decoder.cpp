@@ -39,6 +39,8 @@
 #define    grav_WGS84 9.7803267714e0
 #endif
 
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg
 typedef struct {
     float timeimu;
     float fxyz[3];
@@ -60,6 +62,8 @@ typedef struct {
     uint8_t nsat;
     uint8_t pvtupdate; /* set to 1 if there are new GPS, set to 0 after */
 } pvt_imu_dat_t;
+#endif // SUSPENDED_AS_UNUSED
+
 
 #define MAXFIELD 100
 
@@ -86,7 +90,7 @@ static int parse_fields(char *const buffer, char **val) {
 
     /* parse fields */
     for (p = buffer; *p && n < MAXFIELD; p = q + 1) {
-        if (p == NULL) break;
+        if (p == nullptr) break;
         if ((q = strchr(p, ',')) || (q = strchr(p, '*')) || (q = strchr(p, '\n')) || (q = strchr(p, '\r'))) {
             val[n++] = p;
             *q = '\0';
@@ -95,6 +99,9 @@ static int parse_fields(char *const buffer, char **val) {
     return n;
 }
 
+
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 static int parse_fields_data(char *const buffer, double *data) {
     char *val[MAXFIELD];
     int n = parse_fields(buffer, val);
@@ -102,6 +109,8 @@ static int parse_fields_data(char *const buffer, double *data) {
         data[i] = atof(val[i]);
     return n;
 }
+#endif // SUSPENDED_AS_UNUSED
+
 
 static FILE *set_output_file(const char *fname, const char *key) {
     char filename[255] = {0}, outfilename[257] = {0};
@@ -112,10 +121,15 @@ static FILE *set_output_file(const char *fname, const char *key) {
     return fopen(outfilename, "w");
 }
 
+
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 static void print_log(char **val, int num) {
     for (int i = 0; i < num; ++i)
         printf("%s%c", val[i], (i + 1) == num ? '\n' : (i + 2) == num ? '*' : ',');
 }
+#endif // SUSPENDED_AS_UNUSED
+
 
 static void deg2dms(double deg, double *dms) {
     double sign = deg < 0.0 ? (-1.0) : (1.0), a = fabs(deg);
@@ -191,17 +205,17 @@ static int add_buff(nmea_buff_t *buff, uint8_t data) {
 int found_time_offset(const char *imufname, double *time_offset) {
     std::vector<double> timeoffset;
     FILE *fIMU = fopen(imufname, "rb");
-    if (fIMU == NULL) return 0;
+    if (fIMU == nullptr) return 0;
 
     char *val[MAXFIELD];
 
     uint8_t data = 0;
     nmea_buff_t buff = {0};
-    while (fIMU != NULL && !feof(fIMU)) {
+    while (fIMU != nullptr && !feof(fIMU)) {
         if ((data = fgetc(fIMU)) == EOF) break;
         if (!add_buff(&buff, data)) continue;
 
-        if (strstr((char *) buff.dat, "#APGPS") != NULL) {
+        if (strstr((char *) buff.dat, "#APGPS") != nullptr) {
             double gpsdata[20] = {0};
             int num = parse_fields((char *) buff.dat, val);
             if (num > 16) {
@@ -313,11 +327,11 @@ int read_sept_pvt(const char *pvtfname, std::vector<pvt_t> &pvts) {
     char buffer[512] = {0};
     pvt_t pvt = {0};
     FILE *fOUT = set_output_file(pvtfname, "-pvt.csv");
-    FILE *fGGA = NULL;
+    FILE *fGGA = nullptr;
     int index = 0;
     double pre_time = 0;
-    while (fGPS != NULL && !feof(fGPS)) {
-        if (fgets(buffer, sizeof(buffer), fGPS) == NULL) break;
+    while (fGPS != nullptr && !feof(fGPS)) {
+        if (fgets(buffer, sizeof(buffer), fGPS) == nullptr) break;
         /*
 -1 1330754218.90  0.59020675017  -1.86143267962     1484.99971      -24.38316   -0.00214   -0.00280   -0.00028  8.31954443e-05 -4.815372e-09  32   6 440   0 -20000000000.000
 -3  1330754218.90          0.790          0.400          0.480          0.630          6.059          7.668  32
@@ -538,6 +552,8 @@ Output_GenerateMessage_GPS(double timeIMU, double timeGPS, double lat, double lo
     return (countOut);
 }
 
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 static int decode_a1_asc_file_ins(const char *fname) {
     FILE *fLOG = fopen(fname, "r");
     if (!fLOG) return 0;
@@ -592,7 +608,11 @@ imu_time_ms,gps_time_ns,ins_solution_status,lat_deg,lon_deg,alt_m,velocity_0_mps
     if (fGGA) fclose(fGGA);
     return EXIT_SUCCESS;
 }
+#endif // SUSPENDED_AS_UNUSED
 
+
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 static int decode_a1_asc_file_gps(const char *fname) {
     FILE *fLOG = fopen(fname, "r");
     if (!fLOG) return 0;
@@ -650,7 +670,11 @@ imu_time_ms,gps_time_ns,lat_deg,lon_deg,alt_ellipsoid_m,alt_msl_m,speed_mps,head
     if (fGGA) fclose(fGGA);
     return EXIT_SUCCESS;
 }
+#endif // SUSPENDED_AS_UNUSED
 
+
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 static int decode_a1_asc_file_imu(const char *fname) {
     FILE *fLOG = fopen(fname, "r");
     if (!fLOG) return 0;
@@ -689,14 +713,18 @@ imu_time_ms,accel_x_g,accel_y_g,accel_z_g,angrate_x_dps,angrate_y_dps,angrate_z_
         if (!fCSV) fCSV = set_output_file(fname, "-imu.csv");
         if (fCSV) {
             fprintf(fCSV, "%10.3f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f,%10.4f\n", imu[0],
-                    imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);
+                    imu[1], imu[2], imu[3], imu[4], imu[5], imu[6], imu[7], imu[8], imu[9], imu[10]);Z
         }
     }
     if (fLOG) fclose(fLOG);
     if (fCSV) fclose(fCSV);
     return EXIT_SUCCESS;
 }
+#endif // SUSPENDED_AS_UNUSED
 
+
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 int merge_data_file(const char *imufname, const char *gpsfname) {
     FILE *fIMU = NULL;
     FILE *fOUT = NULL;
@@ -760,6 +788,8 @@ int merge_data_file(const char *imufname, const char *gpsfname) {
 
     return 1;
 }
+#endif // SUSPENDED_AS_UNUSED
+
 
 //============================================================================================================
 //! \brief Simple decoding progress report.
@@ -948,13 +978,13 @@ static void print(FILE *fp, FILE *fsol, const NComRxC *nrx) {
 static int read_oxts_data(const char *fname) {
     FILE *fLOG = fopen(fname, "rb");
     if (!fLOG) return 0;
-    FILE *fCSV = NULL;
-    FILE *fGGA = NULL;
+    FILE *fCSV = nullptr;
+    FILE *fGGA = nullptr;
 
     int c = 0;                // char from input file
     NComRxC *nrx = NComCreateNComRxC();
 
-    while (nrx != NULL && fLOG != NULL && !feof(fLOG) && (c = fgetc(fLOG)) != EOF) {
+    while (nrx != nullptr && fLOG != nullptr && !feof(fLOG) && (c = fgetc(fLOG)) != EOF) {
         // Decode the data
         if (NComNewChar(nrx, (unsigned char) c) == COM_NEW_UPDATE) {
             // For regular updates then output to main output file, otherwise,
@@ -1019,7 +1049,7 @@ static int input_a1_data(a1buff_t *a1, uint8_t data) {
         if (data == ',') {
             a1->loc[a1->nseg++] = a1->nbyte;
             if (a1->nseg == 2) {
-                if (strstr((char *) a1->buf, "APANT") != NULL || strstr((char *) a1->buf, "APRTK") != NULL) {
+                if (strstr((char *) a1->buf, "APANT") != nullptr || strstr((char *) a1->buf, "APRTK") != nullptr) {
                     uint8_t *temp = a1->buf + (a1->loc[0]) + 1;
                     a1->nlen = atof((char *) temp);
                 } else {
@@ -1057,25 +1087,25 @@ static int read_a1_data(const char *fname) {
     FILE *fLOG = fopen(fname, "rb");
     if (!fLOG) return 0;
     int data = 0;
-    FILE *fCSV = NULL;
-    FILE *fGGA = NULL;
-    FILE *fIMU = NULL;
-    FILE *fLOG_GGA = NULL;
-    FILE *fGPS_CSV = NULL;
-    FILE *fGP2_CSV = NULL;
-    FILE *fGPS_GGA = NULL;
-    FILE *fGP2_GGA = NULL;
-    FILE *fANT1 = NULL;
-    FILE *fANT2 = NULL;
-    FILE *fBASE = NULL;
-    FILE *fASC = NULL;
+    FILE *fCSV = nullptr;
+    FILE *fGGA = nullptr;
+    FILE *fIMU = nullptr;
+    FILE *fLOG_GGA = nullptr;
+    FILE *fGPS_CSV = nullptr;
+    FILE *fGP2_CSV = nullptr;
+    FILE *fGPS_GGA = nullptr;
+    FILE *fGP2_GGA = nullptr;
+    FILE *fANT1 = nullptr;
+    FILE *fANT2 = nullptr;
+    FILE *fBASE = nullptr;
+    FILE *fASC = nullptr;
     char *val[MAXFIELD];
     a1buff_t a1buff = {0};
 
-    while (fLOG != NULL && !feof(fLOG) && (data = fgetc(fLOG)) != EOF) {
+    while (fLOG != nullptr && !feof(fLOG) && (data = fgetc(fLOG)) != EOF) {
         int ret = input_a1_data(&a1buff, data);
         if (ret) {
-            if (strstr((char *) a1buff.buf, "*") == NULL) {
+            if (strstr((char *) a1buff.buf, "*") == nullptr) {
                 printf("no checksum: %s\n", a1buff.buf);
                 a1buff.nbyte = 0;
                 continue;
@@ -1087,7 +1117,7 @@ static int read_a1_data(const char *fname) {
                 continue;
             }
 
-            if (strstr((char *) a1buff.buf, "$G") != NULL) {
+            if (strstr((char *) a1buff.buf, "$G") != nullptr) {
                 if (!fLOG_GGA) fLOG_GGA = set_output_file(fname, "-src.nmea");
                 if (fLOG_GGA) {
                     fprintf(fLOG_GGA, "%s", (char *) a1buff.buf);
@@ -1123,7 +1153,7 @@ static int read_a1_data(const char *fname) {
                 isOK = 1;
             }
 
-            if (!isOK && num == 18 && strstr(val[0], "APGPS") != NULL) {
+            if (!isOK && num == 18 && strstr(val[0], "APGPS") != nullptr) {
                 /* time [s], lat [deg], lon [deg], ht [m], speed [m/s], heading [deg], hor. accuracy [m], ver. accuracy [m], PDOP, fixType, sat num, gps second [s], pps [s] */
                 /*
 #APGPS,318213.135,1343773580500184320,37.3988755,-121.9791327,-27.9650,1.9240,0.0110,0.0000,0.2380,0.3820,0.9700,3,29,0.0820,180.0000,0*65
@@ -1168,7 +1198,7 @@ static int read_a1_data(const char *fname) {
                 }
                 isOK = 1;
             }
-            if (!isOK && num >= 17 && strstr(val[0], "APGP2") != NULL) {
+            if (!isOK && num >= 17 && strstr(val[0], "APGP2") != nullptr) {
                 /*
 #APGP2,318213.258,1343773580499803648,37.3989018,-121.9791254,-27.2050,2.6840,0.0090,0.0000,0.2730,0.4510,1.1400,3,26,0.0600,180.0000,0*07
                 */
@@ -1212,7 +1242,7 @@ static int read_a1_data(const char *fname) {
                 }
                 isOK = 1;
             }
-            if (!isOK && num >= 12 && strstr(val[0], "APIMU") != NULL) {
+            if (!isOK && num >= 12 && strstr(val[0], "APIMU") != nullptr) {
                 /*
                 #APIMU,318214.937,0.0344,-0.0128,1.0077,-0.0817,0.0013,-0.0038,0.01051,0.0000,318214.548,47.0547*55
                 */
@@ -1238,7 +1268,7 @@ static int read_a1_data(const char *fname) {
                 }
                 isOK = 1;
             }
-            if (!isOK && num >= 14 && strstr(val[0], "APINS") != NULL) {
+            if (!isOK && num >= 14 && strstr(val[0], "APINS") != nullptr) {
                 /* time[s], lat[radian], lon[radian], ht[m], vn[m / s], ve[m / s], vd[m / s], roll[deg], pitch[deg], yaw[deg] */
                 /*
                 #APINS,318215,1343773580502990592,1,37.398875500000,-121.979132700000,-27.965002059937,,,,-0.166232,1.773182,0.250746,1*74
@@ -1302,6 +1332,9 @@ static int read_a1_data(const char *fname) {
     return 0;
 }
 
+
+#ifdef SUSPENDED_AS_UNUSED
+// 2023/01/31 dwg -
 double lat2local(double lat, double *lat2north) {
     double f_WGS84 = (1.0 / finv_WGS84);
     double e2WGS84 = (2.0 * f_WGS84 - f_WGS84 * f_WGS84);
@@ -1313,6 +1346,8 @@ double lat2local(double lat, double *lat2north) {
     *lat2north = Rm;
     return Rn * clat;
 }
+#endif // SUSPENDED_AS_UNUSED
+
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -1341,9 +1376,9 @@ int main(int argc, char **argv) {
         //read_a1_data("C:\\projects\\driveData\\PNTAX2022\\DAY1\\DAY1\\ShortJam\\day1_shortjam_2.txt");
         //read_a1_data("D:\\anello\\output_date_2022_8_15_time_17_5_38_SN_202200000115--asc.txt");
     } else {
-        if (strstr(argv[1], "a1") != NULL) {
+        if (strstr(argv[1], "a1") != nullptr) {
             read_a1_data(argv[2]);
-        } else if (strstr(argv[1], "oxts") != NULL) {
+        } else if (strstr(argv[1], "oxts") != nullptr) {
             read_oxts_data(argv[2]);
         }
         //merge_data_file(argv[1], argv[2]);
