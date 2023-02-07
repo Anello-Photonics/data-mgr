@@ -67,14 +67,80 @@ typedef struct {
 
 #define MAXFIELD 100
 
+//#define SELECTED_CHECKSUM_FUNCTION verify_7_bit_checksum
+  #define SELECTED_CHECKSUM_FUNCTION verify_8_bit_checksum
 
+/**************************************************************
+ * Verify 7-bit Checksum
+ * @param buf
+ * @return Returns true or false depending on checksum validity
+ */
 //returns true if the checksum is correct
-static int verify_checksum(char *buf) {
-    char *q, *msg_ck, sum;
-    char ck[10] = {'\0'};
-    int i = 0;
+static int verify_7_bit_checksum(char *buf) {
+    char *q;
+    char *msg_ck;
 
-    for (q = (char *) buf + 1, sum = 0; *q != '*' && *q; q++) {
+#warning MISRA 5-0-11: The plain char type shall only be used for the storage and use of character values
+    char sum;
+
+    char ck[10] = {'\0'};
+
+    // 2023/02/01 dwg -
+#ifdef SUSPENDED_AS_UNUSED
+    int i = 0;
+#endif // SUSPENDED_AS_UNUSED
+
+// 2023/02/01 dwg - remove cast, relocate sum initializer
+// MISRA 5-2-4: C-style casts (other than void casts) and functional notation casts (other than explicit constructor calls) shall not be used
+// MISRA 5-18-1: The comma operator shall not be used
+//  for (q = (char *) buf + 1, sum = 0; *q != '*' && *q; q++) {
+    sum = 0;
+
+#warning MISRA 5-0-13: The condition of an if-statement and the condition of an iteration-statement shall have type bool
+
+    /*
+     * Joe, I don't understand this next line. It reads to me...
+     * initializer is: char *q ptr =  buf+1
+     * conditional is: char pointed to by q ne asterick
+     * && denotes second conditional follows, but what follows
+     * is a raw pointer reference, not a comparison.
+     * Do you know what was intended here?
+     */
+    for (q =          buf + 1         ; *q != '*' && *q; q++) {
+        sum ^= *q;
+    }
+
+    sprintf(ck, "%02X", sum);
+
+    msg_ck = strchr(buf, '*') + 1;
+    return (msg_ck[0] == ck[0] && msg_ck[1] == ck[1]) ? 1 : 0;
+}
+
+
+/*****************************************************************
+ * Verify 8 bit Checksum
+ * @param buf
+ * @return Returns true or false depending on checksum validity
+ */
+//returns true if the checksum is correct
+static int verify_8_bit_checksum(char *buf) {
+    char *q;
+    char *msg_ck;
+
+    unsigned char sum;
+    char ck[10] = {'\0'};
+
+    // 2023/02/01 dwg -
+#ifdef SUSPENDED_AS_UNUSED
+    int i = 0;
+#endif // SUSPENDED_AS_UNUSED
+
+// 2023/02/01 dwg - remove cast, relocate sum initializer
+// MISRA 5-2-4: C-style casts (other than void casts) and functional notation casts (other than explicit constructor calls) shall not be used
+// MISRA 5-18-1: The comma operator shall not be used
+//  for (q = (char *) buf + 1, sum = 0; *q != '*' && *q; q++) {
+    sum = 0;
+    for (q =          buf + 1         ; *q != '*' && *q; q++) {
         sum ^= *q;
     }
 
@@ -1111,7 +1177,8 @@ static int read_a1_data(const char *fname) {
                 continue;
             }
 
-            if (!verify_checksum((char *) a1buff.buf)) {
+            // 2023/02/03 dwg - SELECTED_CHECKSUM_FUNCTION is set by a macro at top of file
+            if (!SELECTED_CHECKSUM_FUNCTION((char *) a1buff.buf)) {
                 printf("checksum fail: %s\n", a1buff.buf);
                 a1buff.nbyte = 0;
                 continue;
