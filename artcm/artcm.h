@@ -114,7 +114,9 @@ typedef struct
 	int32_t     resPosD;	    //Int32	    0.001 m
 	int32_t     relPosLength;	//Int32	    0.001 m
 	int32_t     relPosHeading;  //Int32	    1e-5 deg
-	uint32_t    relPosHeading_Accuracy;	//UInt32	1e-5 deg
+	uint32_t    relPosLength_Accuracy;  //UInt32    0.1 mm
+	uint32_t    relPosHeading_Accuracy; //UInt32    1e-5 deg
+	uint16_t    statusFlags;      // uint16
 } RTCM_msg_HDR_t;
 
 // Pack struct to 1 byte offsets
