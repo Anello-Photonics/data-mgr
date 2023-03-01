@@ -108,7 +108,7 @@ typedef struct
 {
 	uint16_t message_type;
 	uint64_t    Time;	        //UInt64	ns
-	uint64_t    GPS_Time;	    //Int64	    ns
+	uint64_t    GPS_Time;	    //UInt64	    ns
 	int32_t     relPosN;	    //Int32	    0.001 m
 	int32_t     relPosE;	    //Int32	    0.001 m
 	int32_t     resPosD;	    //Int32	    0.001 m
